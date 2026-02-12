@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 25% 96%;
+  --foreground: 214 45% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 214 45% 14%;
+  --primary: 210 84% 32%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 192 42% 93%;
+  --secondary-foreground: 214 45% 14%;
+  --muted: 210 24% 93%;
+  --muted-foreground: 214 18% 44%;
+  --accent: 187 62% 92%;
+  --accent-foreground: 214 45% 14%;
+  --border: 210 24% 86%;
+  --danger: 0 77% 46%;
+  --warning: 36 89% 50%;
+  --success: 145 64% 40%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+.tam-gradient {
+  background: radial-gradient(circle at top right, rgba(73, 157, 211, 0.14), transparent 45%),
+    linear-gradient(180deg, rgba(255,255,255,0.8), rgba(244,248,252,0.9));
+}
+
+.tam-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.tam-float {
+  animation-name: tamFloat;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.tam-fade-up {
+  animation: tamFadeUp 0.7s ease-out both;
+}
+
+.tam-loading-bar {
+  width: 35%;
+  animation: tamLoadingBar 2.2s ease-in-out infinite;
+}
+
+.tam-background-flow {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.24), transparent 38%),
+    radial-gradient(circle at 80% 70%, rgba(16, 185, 129, 0.2), transparent 36%),
+    linear-gradient(110deg, rgba(15, 23, 42, 0.35), rgba(2, 132, 199, 0.08), rgba(15, 23, 42, 0.35));
+  background-size: 180% 180%;
+  animation: tamBackgroundDrift 14s ease-in-out infinite;
+}
+
+.tam-particle {
+  animation-name: tamParticleFloat;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes tamFloat {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+}
+
+@keyframes tamParticleFloat {
+  0% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-16px) scale(1.25);
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.3;
+  }
+}
+
+@keyframes tamBackgroundDrift {
+  0% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+  100% {
+    background-position: 0% 40%;
+  }
+}
+
+@keyframes tamFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tamLoadingBar {
+  0% {
+    transform: translateX(-30%);
+    width: 28%;
+  }
+  50% {
+    transform: translateX(110%);
+    width: 42%;
+  }
+  100% {
+    transform: translateX(-30%);
+    width: 28%;
+  }
+}

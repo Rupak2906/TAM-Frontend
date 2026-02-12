@@ -1,0 +1,192 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartCard } from "@/components/charts/chart-card";
+import { RiskZoneMapChart } from "@/components/charts/common-charts";
+import { DataTable } from "@/components/tables/data-table";
+import { useApiQuery } from "@/hooks/use-api-query";
+import { RiskResponseSchema, RiskRegisterRowSchema } from "@/lib/schemas/types";
+import { z } from "zod";
+import { SeverityBadge } from "@/components/severity-badge";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { formatCurrency, formatPct } from "@/lib/utils/format";
+import type { Severity } from "@/lib/schemas/types";
+
+export default function RiskAssessmentPage() {
+  const router = useRouter();
+  const query = useApiQuery(["risk"], "/api/deal/risk", RiskResponseSchema);
+  const [selectedRisk, setSelectedRisk] = useState<z.infer<typeof RiskRegisterRowSchema> | null>(null);
+
+  if (query.isLoading || !query.data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
+  const data = query.data;
+  const overallSeverity: Severity = data.riskScore >= 7 ? "Red" : data.riskScore >= 4.5 ? "Amber" : "Green";
+  const redCount = data.register.filter((r) => r.severity === "Red").length;
+  const amberCount = data.register.filter((r) => r.severity === "Amber").length;
+  const greenCount = data.register.filter((r) => r.severity === "Green").length;
+  const openRiskCount = data.register.filter((r) => r.status !== "Mitigated").length;
+  const resolvedRiskCount = data.register.filter((r) => r.status === "Mitigated").length;
+  const topRisks = [...data.dimensions].sort((a, b) => b.score - a.score).slice(0, 3);
+  const gaugeFillPct = Math.max(0, Math.min(100, (data.riskScore / 10) * 100));
+  const registerWithProbability = data.register.map((row, idx) => ({
+    ...row,
+    probability: row.severity === "Red" ? "High" : row.severity === "Amber" ? "Medium" : "Low",
+    adjustmentReliancePct: row.id === "R-01" ? 5.4 : row.id === "R-02" ? 2.8 : row.id === "R-03" ? 1.7 : 0.8,
+    openResolved: row.status === "Mitigated" ? "Resolved" : "Open",
+    riskCategory:
+      idx === 0
+        ? "Earnings Sustainability Risk"
+        : idx === 1
+          ? "Revenue Concentration Risk"
+          : idx === 2
+            ? "Working Capital Risk"
+            : "Data Quality Risk",
+  }));
+  const anomalyRows = [
+    { metric: "Discount rate variance (%)", current: "6.8%", prior: "4.0%", variance: "+2.8ppt", status: "Warn" },
+    { metric: "Margin outliers by product/customer", current: "3 outliers", prior: "1 outlier", variance: "+2", status: "Warn" },
+    { metric: "Payroll spikes (% change)", current: "+12.4%", prior: "+4.9%", variance: "+7.5ppt", status: "Warn" },
+    { metric: "Refunds / credits as % of revenue", current: "2.7%", prior: "1.8%", variance: "+0.9ppt", status: "Pass" },
+    { metric: "Manual journal entry volume (%)", current: "9.6%", prior: "7.0%", variance: "+2.6ppt", status: "Warn" },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Risk Assessment</h2>
+        <p className="rounded-full bg-muted px-3 py-1 text-sm">Overall deal risk: {data.riskScore}/10</p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardHeader><CardTitle>Overall Deal Risk Indicator</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-4">
+              <div
+                className="grid h-24 w-24 place-items-center rounded-full"
+                style={{
+                  background: `conic-gradient(#f97316 ${gaugeFillPct}%, #e2e8f0 ${gaugeFillPct}% 100%)`,
+                }}
+              >
+                <div className="grid h-16 w-16 place-items-center rounded-full bg-white text-lg font-bold">
+                  {data.riskScore.toFixed(1)}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <SeverityBadge severity={overallSeverity} />
+                <p className="text-sm text-muted-foreground">Weighted score from tie-outs, anomalies, and evidence quality.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="rounded bg-rose-50 p-2"><p className="font-semibold text-rose-700">{redCount}</p><p>Red</p></div>
+              <div className="rounded bg-amber-50 p-2"><p className="font-semibold text-amber-700">{amberCount}</p><p>Amber</p></div>
+              <div className="rounded bg-emerald-50 p-2"><p className="font-semibold text-emerald-700">{greenCount}</p><p>Green</p></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-center text-xs">
+              <div className="rounded bg-white p-2 border"><p className="font-semibold">{openRiskCount}</p><p>Open Risks</p></div>
+              <div className="rounded bg-white p-2 border"><p className="font-semibold">{resolvedRiskCount}</p><p>Resolved Risks</p></div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle>Risk Hotspots</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {topRisks.map((risk) => (
+              <div key={risk.subject} className="rounded border bg-white p-3">
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium">{risk.subject}</span>
+                  <span className="font-semibold">{risk.score.toFixed(1)} / 10</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full ${risk.score >= 7 ? "bg-rose-500" : risk.score >= 4.5 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    style={{ width: `${(risk.score / 10) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <ChartCard title="Risk Zone Map (where risk lives)" steps={[{ title: "Inputs", description: "Tie-out, variance, and anomaly signals", references: ["Tie-out engine", "Anomaly monitor"] }, { title: "Transformations", description: "Weighted component scoring plus zone bucketing (Low/Watch/High)", references: ["Risk weighting matrix"] }, { title: "Formula", description: "Weighted average score (0-10) and zone segmentation by thresholds 4.5 and 7.0", references: ["Risk model v3"] }, { title: "Filters / Overrides", description: "Analyst override requires memo", references: ["Override control"] }]} renderChart={(expanded) => <RiskZoneMapChart data={data.dimensions} expanded={expanded} />} />
+
+      <DataTable
+        title="Tie-out scoreboard"
+        rows={data.tieOuts}
+        columns={[
+          { key: "name", header: "Check" },
+          { key: "expected", header: "Expected", render: (r) => formatCurrency(r.expected) },
+          { key: "observed", header: "Observed", render: (r) => formatCurrency(r.observed) },
+          { key: "diff", header: "Diff", render: (r) => formatCurrency(r.diff) },
+          { key: "variancePct", header: "%", render: (r) => formatPct(r.variancePct) },
+          { key: "tolerancePct", header: "Tolerance", render: (r) => formatPct(r.tolerancePct) },
+          {
+            key: "status",
+            header: "Status",
+            render: (r) => (
+              <span className={`rounded-full px-2 py-1 text-xs font-semibold ${r.status === "Pass" ? "bg-emerald-100 text-emerald-700" : r.status === "Warn" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}>
+                {r.status}
+              </span>
+            ),
+          },
+        ]}
+      />
+
+      <DataTable
+        title="Risk register"
+        rows={registerWithProbability}
+        onRowClick={(row) => setSelectedRisk(row)}
+        columns={[
+          { key: "risk", header: "Risk" },
+          { key: "riskCategory", header: "Category" },
+          { key: "severity", header: "Severity", render: (r) => <SeverityBadge severity={r.severity} /> },
+          { key: "probability", header: "Probability" },
+          { key: "adjustmentReliancePct", header: "Adjustment reliance (% EBITDA)", render: (r) => `${r.adjustmentReliancePct.toFixed(1)}%` },
+          { key: "impactArea", header: "Impact Area" },
+          { key: "exposureRange", header: "Exposure Range" },
+          { key: "openResolved", header: "Open/Resolved" },
+          { key: "evidence", header: "Evidence" },
+        ]}
+      />
+
+      <DataTable
+        title="Anomaly Detection Monitor"
+        rows={anomalyRows}
+        columns={[
+          { key: "metric", header: "Metric" },
+          { key: "current", header: "Current" },
+          { key: "prior", header: "Prior" },
+          { key: "variance", header: "Variance" },
+          {
+            key: "status",
+            header: "Status",
+            render: (r) => (
+              <span className={`rounded-full px-2 py-1 text-xs font-semibold ${r.status === "Pass" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                {r.status}
+              </span>
+            ),
+          },
+        ]}
+      />
+
+      <Sheet open={!!selectedRisk} onOpenChange={(v) => !v && setSelectedRisk(null)}>
+        <SheetContent side="right" className="w-[440px]">
+          {selectedRisk ? (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">{selectedRisk.risk}</h3>
+              <SeverityBadge severity={selectedRisk.severity} />
+              <p className="text-sm"><span className="font-semibold">Impact area:</span> {selectedRisk.impactArea}</p>
+              <p className="text-sm"><span className="font-semibold">Exposure:</span> {selectedRisk.exposureRange}</p>
+              <p className="text-sm"><span className="font-semibold">Evidence:</span> {selectedRisk.evidence}</p>
+              <Button variant="outline" onClick={() => router.push(`/inquiry?prefill=${encodeURIComponent(selectedRisk.risk)}`)}>Create inquiry</Button>
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
