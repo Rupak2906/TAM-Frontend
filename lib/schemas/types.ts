@@ -116,6 +116,11 @@ export const InquirySchema = z.object({
   blocking: z.boolean(),
 });
 
+export const InquiryResponseSchema = z.object({
+  lastUpdated: z.string(),
+  inquiries: z.array(InquirySchema),
+});
+
 export const SummaryResponseSchema = z.object({
   lastUpdated: z.string(),
   metrics: z.array(MetricSchema),
@@ -168,3 +173,4 @@ export type RiskResponse = z.infer<typeof RiskResponseSchema>;
 export type DocumentsResponse = z.infer<typeof DocumentsResponseSchema>;
 export type CustomerResponse = z.infer<typeof CustomerResponseSchema>;
 export type Inquiry = z.infer<typeof InquirySchema>;
+export type InquiryResponse = z.infer<typeof InquiryResponseSchema>;

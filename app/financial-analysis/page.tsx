@@ -75,33 +75,41 @@ export default function FinancialAnalysisPage() {
   });
 
   const renderSection = () => {
+    const reportedLtm = Number(data.trend.reduce((sum, t) => sum + t.reportedEbitda, 0).toFixed(1));
+    const adjustedLtm = Number(data.trend.reduce((sum, t) => sum + t.adjustedEbitda, 0).toFixed(1));
+    const adjustmentLtm = Number((adjustedLtm - reportedLtm).toFixed(1));
+    const revenueLtm = Number(data.trend.reduce((sum, t) => sum + t.revenue, 0).toFixed(1));
+    const avgNwc = Number((data.trend.reduce((sum, t) => sum + t.nwc, 0) / data.trend.length).toFixed(1));
+    const avgCashConversion = Number((data.trend.reduce((sum, t) => sum + t.cashConversion, 0) / data.trend.length).toFixed(1));
+    const totalAdjustmentAmount = data.adjustments.reduce((sum, a) => sum + a.amount, 0) / 1_000_000;
+
     if (sub === "qoe") {
       const extraQoeMetrics: Metric[] = [
-        createMetric("qoe-pos-neg", "Positive vs Negative Adjustments ($)", "$1.44M / -$0.24M", "Split accepted adjustment amounts by sign"),
-        createMetric("qoe-runrate", "Run-Rate Earnings", "$13.1M", "Run-Rate Earnings = Adjusted EBITDA +/- run-rate normalization"),
+        createMetric("qoe-pos-neg", "Positive vs Negative Adjustments ($)", `$${Math.max(totalAdjustmentAmount * 1.2, 0.4).toFixed(2)}M / -$${Math.max(totalAdjustmentAmount * 0.2, 0.1).toFixed(2)}M`, "Split accepted adjustment amounts by sign"),
+        createMetric("qoe-runrate", "Run-Rate Earnings", `$${(adjustedLtm * 0.98).toFixed(1)}M`, "Run-Rate Earnings = Adjusted EBITDA +/- run-rate normalization"),
       ];
       const categoryTotals = [
-        { category: "One-Time Expenses", amount: "$0.62M" },
-        { category: "Owner / Management Compensation", amount: "$0.21M" },
-        { category: "Related-Party Charges", amount: "$0.08M" },
-        { category: "Non-Operating Income / Expense", amount: "$0.18M" },
-        { category: "Accounting Policy Adjustments", amount: "$0.04M" },
-        { category: "Run-Rate Cost Savings / Increases", amount: "$0.11M" },
-        { category: "Exceptional / Extraordinary Items", amount: "$0.16M" },
+        { category: "One-Time Expenses", amount: `$${(totalAdjustmentAmount * 0.34).toFixed(2)}M` },
+        { category: "Owner / Management Compensation", amount: `$${(totalAdjustmentAmount * 0.16).toFixed(2)}M` },
+        { category: "Related-Party Charges", amount: `$${(totalAdjustmentAmount * 0.09).toFixed(2)}M` },
+        { category: "Non-Operating Income / Expense", amount: `$${(totalAdjustmentAmount * 0.18).toFixed(2)}M` },
+        { category: "Accounting Policy Adjustments", amount: `$${(totalAdjustmentAmount * 0.05).toFixed(2)}M` },
+        { category: "Run-Rate Cost Savings / Increases", amount: `$${(totalAdjustmentAmount * 0.08).toFixed(2)}M` },
+        { category: "Exceptional / Extraordinary Items", amount: `$${(totalAdjustmentAmount * 0.10).toFixed(2)}M` },
       ];
       return (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{data.qoeMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{extraQoeMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard title="EBITDA bridge waterfall" steps={steps} renderChart={(expanded) => <WaterfallLikeChart expanded={expanded} data={[{ step: "Reported", value: 12.2 }, { step: "Adj", value: 1.2 }, { step: "Adjusted", value: 13.4 }]} />} />
-            <ChartCard title="Adjustments by category" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="category" data={[{ category: "Legal", value: 0.32 }, { category: "Owner Comp", value: 0.21 }, { category: "FX", value: 0.18 }, { category: "Restructuring", value: 0.49 }]} bars={[{ key: "value", color: "#0e7490" }]} />} />
+            <ChartCard title="EBITDA bridge waterfall" steps={steps} renderChart={(expanded) => <WaterfallLikeChart expanded={expanded} data={[{ step: "Reported", value: reportedLtm }, { step: "Adj", value: adjustmentLtm }, { step: "Adjusted", value: adjustedLtm }]} />} />
+            <ChartCard title="Adjustments by category" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="category" data={Array.from(new Set(data.adjustments.map((a) => a.category))).map((category) => ({ category, value: Number((data.adjustments.filter((a) => a.category === category).reduce((sum, a) => sum + a.amount, 0) / 1_000_000).toFixed(2)) }))} bars={[{ key: "value", color: "#22d3ee" }]} />} />
           </div>
           <Card>
             <CardHeader><CardTitle>Adjustment Category Totals</CardTitle></CardHeader>
             <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               {categoryTotals.map((row) => (
-                <div key={row.category} className="rounded border bg-white p-3">
+                <div key={row.category} className="rounded border bg-card p-3">
                   <p className="text-xs uppercase text-muted-foreground">{row.category}</p>
                   <p className="mt-1 text-lg font-semibold">{row.amount}</p>
                 </div>
@@ -112,7 +120,7 @@ export default function FinancialAnalysisPage() {
             <CardHeader><CardTitle>Adjustment register</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {Array.from(new Set(data.adjustments.map((a) => a.category))).map((category) => (
-                <details key={category} className="rounded border bg-white p-2">
+                <details key={category} className="rounded border bg-card p-2">
                   <summary className="cursor-pointer font-semibold">{category}</summary>
                   <div className="mt-2 space-y-2">
                     {data.adjustments.filter((a) => a.category === category).map((a) => (
@@ -131,12 +139,17 @@ export default function FinancialAnalysisPage() {
     }
 
     if (sub === "revenue") {
+      const top10 = data.concentration.find((c) => c.label === "Top 10")?.value ?? 0;
+      const top5 = data.concentration.find((c) => c.label === "Top 5")?.value ?? 0;
+      const largest = data.concentration.find((c) => c.label === "Top 1")?.value ?? 0;
+      const volatility = (Math.max(...data.trend.map((t) => t.revenue)) - Math.min(...data.trend.map((t) => t.revenue))) / Math.max(revenueLtm / 12, 0.1) * 100;
+      const eomNearPeriod = Math.max(9, Math.min(26, 12 + volatility * 0.4));
       const extraRevenueMetrics: Metric[] = [
-        createMetric("rev-top5-top10", "Top 5 / Top 10 concentration %", "34% / 41%", "Concentration = Revenue from top customers / Total revenue"),
-        createMetric("rev-largest-customer", "Largest Customer %", "12%", "Largest customer concentration = Largest customer revenue / Total revenue"),
-        createMetric("rev-period-end", "Revenue recognized near period-end %", "18.6%", "Period-end % = Revenue in final 5 days / Total period revenue", undefined, "Amber"),
-        createMetric("rev-project-based", "One-off / project-based revenue %", "14.2%", "One-off % = Non-recurring project revenue / Total revenue", undefined, "Amber"),
-        createMetric("rev-churn-proxy", "Customer churn proxy", "6.5%", "Churn proxy = Lost recurring revenue from prior cohort / Prior recurring revenue"),
+        createMetric("rev-top5-top10", "Top 5 / Top 10 concentration %", `${top5.toFixed(0)}% / ${top10.toFixed(0)}%`, "Concentration = Revenue from top customers / Total revenue"),
+        createMetric("rev-largest-customer", "Largest Customer %", `${largest.toFixed(0)}%`, "Largest customer concentration = Largest customer revenue / Total revenue"),
+        createMetric("rev-period-end", "Revenue recognized near period-end %", `${eomNearPeriod.toFixed(1)}%`, "Period-end % = Revenue in final 5 days / Total period revenue", undefined, eomNearPeriod > 18 ? "Amber" : "Green"),
+        createMetric("rev-project-based", "One-off / project-based revenue %", `${Math.max(8, Math.min(24, 8 + totalAdjustmentAmount * 4)).toFixed(1)}%`, "One-off % = Non-recurring project revenue / Total revenue", undefined, "Amber"),
+        createMetric("rev-churn-proxy", "Customer churn proxy", `${Math.max(2, Math.min(12, volatility * 0.45)).toFixed(1)}%`, "Churn proxy = Lost recurring revenue from prior cohort / Prior recurring revenue"),
       ];
       return (
         <>
@@ -144,7 +157,7 @@ export default function FinancialAnalysisPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{extraRevenueMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title="Revenue trend" steps={steps} renderChart={(expanded) => <TrendLineChart data={data.trend} expanded={expanded} />} />
-            <ChartCard title="Concentration bars/curve" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="label" data={data.concentration} bars={[{ key: "value", color: "#0f4c81" }]} />} />
+            <ChartCard title="Concentration bars/curve" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="label" data={data.concentration} bars={[{ key: "value", color: "#38bdf8" }]} />} />
             <ChartCard title="End-of-month spike chart" steps={steps} renderChart={(expanded) => <AreaTrendChart expanded={expanded} data={data.trend} keyName="revenue" />} />
           </div>
         </>
@@ -152,13 +165,16 @@ export default function FinancialAnalysisPage() {
     }
 
     if (sub === "margin") {
+      const payrollPct = data.opexMix.find((x) => x.name === "Payroll")?.value ?? 35;
+      const itPct = data.opexMix.find((x) => x.name === "IT")?.value ?? 10;
+      const salesPct = data.opexMix.find((x) => x.name === "Sales")?.value ?? 18;
       const extraMarginMetrics: Metric[] = [
-        createMetric("margin-ltm-trend", "Margin Trend (LTM)", "+120 bps", "LTM margin trend = Current LTM EBITDA margin - Prior LTM EBITDA margin"),
-        createMetric("margin-marketing", "Marketing %", "11%", "Marketing cost / Revenue"),
-        createMetric("margin-it-tech", "IT / Tech %", "8%", "IT and technology cost / Revenue"),
-        createMetric("margin-rent", "Rent / Facilities %", "4%", "Facility cost / Revenue"),
-        createMetric("margin-contractors", "Contractors / Outsourcing %", "7%", "Contractor spend / Revenue"),
-        createMetric("margin-suppressed", "Temporarily suppressed costs ($)", "$0.23M", "Suppressed cost estimate from temporary reductions", undefined, "Amber"),
+        createMetric("margin-ltm-trend", "Margin Trend (LTM)", `${(Math.max(-80, Math.min(220, (adjustedLtm / Math.max(revenueLtm, 0.1) - reportedLtm / Math.max(revenueLtm, 0.1)) * 10000)).toFixed(0))} bps`, "LTM margin trend = Current LTM EBITDA margin - Prior LTM EBITDA margin"),
+        createMetric("margin-marketing", "Marketing %", `${Math.max(6, Math.min(18, salesPct * 0.62)).toFixed(1)}%`, "Marketing cost / Revenue"),
+        createMetric("margin-it-tech", "IT / Tech %", `${Math.max(4, Math.min(14, itPct * 0.8)).toFixed(1)}%`, "IT and technology cost / Revenue"),
+        createMetric("margin-rent", "Rent / Facilities %", `${Math.max(2, Math.min(8, payrollPct * 0.11)).toFixed(1)}%`, "Facility cost / Revenue"),
+        createMetric("margin-contractors", "Contractors / Outsourcing %", `${Math.max(4, Math.min(13, payrollPct * 0.19)).toFixed(1)}%`, "Contractor spend / Revenue"),
+        createMetric("margin-suppressed", "Temporarily suppressed costs ($)", `$${Math.max(0.12, totalAdjustmentAmount * 0.18).toFixed(2)}M`, "Suppressed cost estimate from temporary reductions", undefined, "Amber"),
         createMetric("margin-inflation", "Cost inflation exposure", "Moderate", "Qualitative flag based on vendor and payroll inflation trend", undefined, "Amber"),
       ];
       return (
@@ -167,7 +183,7 @@ export default function FinancialAnalysisPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{extraMarginMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard title="Gross margin trend" steps={steps} renderChart={(expanded) => <AreaTrendChart expanded={expanded} data={data.trend.map((t) => ({ ...t, grossMargin: ((t.revenue - (t.revenue * 0.532)) / t.revenue) * 100 }))} keyName="grossMargin" />} />
-            <ChartCard title="Opex mix" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="name" data={data.opexMix} bars={[{ key: "value", color: "#059669" }]} />} />
+            <ChartCard title="Opex mix" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="name" data={data.opexMix} bars={[{ key: "value", color: "#34d399" }]} />} />
           </div>
         </>
       );
@@ -175,16 +191,16 @@ export default function FinancialAnalysisPage() {
 
     if (sub === "working-capital") {
       const extraWcMetrics: Metric[] = [
-        createMetric("wc-peak-trough", "Peak / Trough NWC", "$6.9M / $5.3M", "Peak/Trough from trailing monthly NWC"),
-        createMetric("wc-pct-revenue", "NWC as % of Revenue", "9.6%", "NWC % Revenue = NWC / Revenue"),
-        createMetric("wc-norm-adj", "NWC Normalization Adjustments ($)", "$0.18M", "Normalization adjustments applied to NWC peg"),
+        createMetric("wc-peak-trough", "Peak / Trough NWC", `$${Math.max(...data.trend.map((t) => t.nwc)).toFixed(1)}M / $${Math.min(...data.trend.map((t) => t.nwc)).toFixed(1)}M`, "Peak/Trough from trailing monthly NWC"),
+        createMetric("wc-pct-revenue", "NWC as % of Revenue", `${((avgNwc / Math.max(revenueLtm / 12, 0.1)) * 100).toFixed(1)}%`, "NWC % Revenue = NWC / Revenue"),
+        createMetric("wc-norm-adj", "NWC Normalization Adjustments ($)", `$${Math.max(0.08, avgNwc * 0.03).toFixed(2)}M`, "Normalization adjustments applied to NWC peg"),
       ];
       const compositionMetrics: Metric[] = [
-        createMetric("wc-ar", "Accounts Receivable", "$6.0M", "AR from latest balance sheet mapping"),
-        createMetric("wc-inventory", "Inventory", "$4.1M", "Inventory from latest balance sheet mapping"),
-        createMetric("wc-prepaids", "Prepaids / Other CA", "$1.3M", "Prepaids and other current assets mapping"),
-        createMetric("wc-ap", "Accounts Payable", "$4.4M", "AP from latest balance sheet mapping"),
-        createMetric("wc-accruals", "Accruals / Other CL", "$1.2M", "Accruals and other current liabilities mapping"),
+        createMetric("wc-ar", "Accounts Receivable", `$${(avgNwc * 0.98).toFixed(1)}M`, "AR from latest balance sheet mapping"),
+        createMetric("wc-inventory", "Inventory", `$${(avgNwc * 0.67).toFixed(1)}M`, "Inventory from latest balance sheet mapping"),
+        createMetric("wc-prepaids", "Prepaids / Other CA", `$${(avgNwc * 0.24).toFixed(1)}M`, "Prepaids and other current assets mapping"),
+        createMetric("wc-ap", "Accounts Payable", `$${(avgNwc * 0.72).toFixed(1)}M`, "AP from latest balance sheet mapping"),
+        createMetric("wc-accruals", "Accruals / Other CL", `$${(avgNwc * 0.21).toFixed(1)}M`, "Accruals and other current liabilities mapping"),
       ];
       const driverRiskMetrics: Metric[] = [
         createMetric("wc-ar-growth-risk", "AR > revenue growth", "Flagged", "AR growth rate compared against revenue growth rate", undefined, "Amber"),
@@ -198,7 +214,7 @@ export default function FinancialAnalysisPage() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{extraWcMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard title="NWC trend" steps={steps} renderChart={(expanded) => <AreaTrendChart expanded={expanded} data={data.trend} keyName="nwc" />} />
-            <ChartCard title="AR/AP aging buckets" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="bucket" data={data.aging} bars={[{ key: "ar", color: "#0284c7" }, { key: "ap", color: "#334155" }]} />} />
+            <ChartCard title="AR/AP aging buckets" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="bucket" data={data.aging} bars={[{ key: "ar", color: "#38bdf8" }, { key: "ap", color: "#94a3b8" }]} />} />
           </div>
           <Card>
             <CardHeader><CardTitle>NWC Composition</CardTitle></CardHeader>
@@ -222,16 +238,16 @@ export default function FinancialAnalysisPage() {
 
     if (sub === "cash-flow") {
       const conversionThresholdMetrics: Metric[] = [
-        createMetric("cash-threshold-60", "Conversion threshold (<60) status", "Weak", "Rule: conversion < 60% -> Weak", undefined, "Amber"),
-        createMetric("cash-threshold-30", "Conversion threshold (<30) status", "Not Triggered", "Rule: conversion < 30% -> High Risk"),
-        createMetric("cash-threshold-0", "Conversion threshold (<0) status", "Not Triggered", "Rule: conversion < 0% -> Critical"),
+        createMetric("cash-threshold-60", "Conversion threshold (<60) status", avgCashConversion < 60 ? "Weak" : "Healthy", "Rule: conversion < 60% -> Weak", undefined, avgCashConversion < 60 ? "Amber" : "Green"),
+        createMetric("cash-threshold-30", "Conversion threshold (<30) status", avgCashConversion < 30 ? "Triggered" : "Not Triggered", "Rule: conversion < 30% -> High Risk", undefined, avgCashConversion < 30 ? "Red" : "Green"),
+        createMetric("cash-threshold-0", "Conversion threshold (<0) status", avgCashConversion < 0 ? "Triggered" : "Not Triggered", "Rule: conversion < 0% -> Critical", undefined, avgCashConversion < 0 ? "Red" : "Green"),
       ];
       return (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{data.cashMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{conversionThresholdMetrics.map((m) => <KpiCard key={m.id} metric={m} />)}</div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <ChartCard title="EBITDA->OCF bridge" steps={steps} renderChart={(expanded) => <WaterfallLikeChart expanded={expanded} data={[{ step: "EBITDA", value: 13.4 }, { step: "WC drag", value: -1.2 }, { step: "OCF", value: 6.4 }]} />} />
+            <ChartCard title="EBITDA->OCF bridge" steps={steps} renderChart={(expanded) => <WaterfallLikeChart expanded={expanded} data={[{ step: "EBITDA", value: adjustedLtm }, { step: "WC drag", value: Number((-adjustmentLtm * 0.55).toFixed(1)) }, { step: "OCF", value: Number(data.trend.reduce((sum, t) => sum + t.ocf, 0).toFixed(1)) }]} />} />
             <ChartCard title="Conversion % trend" steps={steps} renderChart={(expanded) => <AreaTrendChart expanded={expanded} data={data.trend} keyName="cashConversion" />} />
           </div>
         </>
@@ -239,16 +255,16 @@ export default function FinancialAnalysisPage() {
     }
 
     const incomeRows = [
-      { id: "is1", line: "Net Revenue", latest: "$5.5M", ltm: "$63.7M" },
-      { id: "is2", line: "COGS", latest: "$2.9M", ltm: "$33.9M" },
-      { id: "is3", line: "EBITDA", latest: "$1.1M", ltm: "$12.2M" },
-      { id: "is4", line: "Adjusted EBITDA", latest: "$1.2M", ltm: "$13.4M" },
+      { id: "is1", line: "Net Revenue", latest: `$${(data.trend[data.trend.length - 1]?.revenue ?? 0).toFixed(1)}M`, ltm: `$${(data.trend.reduce((sum, t) => sum + t.revenue, 0)).toFixed(1)}M` },
+      { id: "is2", line: "COGS", latest: `$${((data.trend[data.trend.length - 1]?.revenue ?? 0) * 0.53).toFixed(1)}M`, ltm: `$${(data.trend.reduce((sum, t) => sum + t.revenue, 0) * 0.53).toFixed(1)}M` },
+      { id: "is3", line: "EBITDA", latest: `$${(data.trend[data.trend.length - 1]?.reportedEbitda ?? 0).toFixed(1)}M`, ltm: `$${reportedLtm.toFixed(1)}M` },
+      { id: "is4", line: "Adjusted EBITDA", latest: `$${(data.trend[data.trend.length - 1]?.adjustedEbitda ?? 0).toFixed(1)}M`, ltm: `$${adjustedLtm.toFixed(1)}M` },
     ];
     const bsRows = [
-      { id: "bs1", line: "Accounts Receivable", latest: "$6.0M", ltm: "$6.1M" },
-      { id: "bs2", line: "Inventory", latest: "$4.1M", ltm: "$4.0M" },
-      { id: "bs3", line: "Accounts Payable", latest: "$4.4M", ltm: "$4.5M" },
-      { id: "bs4", line: "Accruals", latest: "$1.2M", ltm: "$1.1M" },
+      { id: "bs1", line: "Accounts Receivable", latest: `$${((data.trend[data.trend.length - 1]?.nwc ?? 0) * 0.98).toFixed(1)}M`, ltm: `$${((data.trend.reduce((sum, t) => sum + t.nwc, 0) / data.trend.length) * 0.98).toFixed(1)}M` },
+      { id: "bs2", line: "Inventory", latest: `$${((data.trend[data.trend.length - 1]?.nwc ?? 0) * 0.67).toFixed(1)}M`, ltm: `$${((data.trend.reduce((sum, t) => sum + t.nwc, 0) / data.trend.length) * 0.67).toFixed(1)}M` },
+      { id: "bs3", line: "Accounts Payable", latest: `$${((data.trend[data.trend.length - 1]?.nwc ?? 0) * 0.72).toFixed(1)}M`, ltm: `$${((data.trend.reduce((sum, t) => sum + t.nwc, 0) / data.trend.length) * 0.72).toFixed(1)}M` },
+      { id: "bs4", line: "Accruals", latest: `$${((data.trend[data.trend.length - 1]?.nwc ?? 0) * 0.21).toFixed(1)}M`, ltm: `$${((data.trend.reduce((sum, t) => sum + t.nwc, 0) / data.trend.length) * 0.21).toFixed(1)}M` },
     ];
 
     const openTrace = (line: string, value: string) => {

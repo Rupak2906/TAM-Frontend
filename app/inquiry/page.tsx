@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DataTable } from "@/components/tables/data-table";
-import { inquiryData } from "@/lib/mock-data/data";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import type { Inquiry } from "@/lib/schemas/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useGlobalStore } from "@/lib/store/use-global-store";
 import { Textarea } from "@/components/ui/textarea";
+import { useApiQuery } from "@/hooks/use-api-query";
+import { InquiryResponseSchema } from "@/lib/schemas/types";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -21,6 +22,11 @@ export default function InquiryPage() {
   const router = useRouter();
   const params = useSearchParams();
   const { deal, period, basis } = useGlobalStore();
+  const query = useApiQuery(
+    ["inquiry", deal, period, basis],
+    `/api/deal/inquiry?deal=${encodeURIComponent(deal)}&period=${encodeURIComponent(period)}&basis=${encodeURIComponent(basis)}`,
+    InquiryResponseSchema
+  );
   const [selected, setSelected] = useState<Inquiry | null>(null);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,12 +39,17 @@ export default function InquiryPage() {
   ]);
 
   const rows = useMemo(() => {
+    if (!query.data) return [];
     const prefill = params.get("prefill");
-    if (!prefill) return inquiryData;
-    const exists = inquiryData.some((r) => r.request.toLowerCase().includes(prefill.toLowerCase()));
-    if (exists) return inquiryData;
-    return [{ id: "INQ-NEW", request: prefill, owner: "Unassigned", dueDate: "2026-02-19", status: "Open", blocking: false }, ...inquiryData];
-  }, [params]);
+    if (!prefill) return query.data.inquiries;
+    const exists = query.data.inquiries.some((r) => r.request.toLowerCase().includes(prefill.toLowerCase()));
+    if (exists) return query.data.inquiries;
+    return [{ id: "INQ-NEW", request: prefill, owner: "Unassigned", dueDate: "2026-02-19", status: "Open", blocking: false }, ...query.data.inquiries];
+  }, [params, query.data]);
+
+  if (query.isLoading || !query.data) {
+    return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
+  }
 
   const quickPrompts = [
     "What are the top risk hotspots right now?",
@@ -116,7 +127,7 @@ export default function InquiryPage() {
                 {messages.map((message, idx) => (
                   <div
                     key={idx}
-                    className={`rounded p-2 text-sm ${message.role === "user" ? "ml-6 bg-primary/10" : "mr-6 bg-white"}`}
+                    className={`rounded p-2 text-sm ${message.role === "user" ? "ml-6 bg-primary/15" : "mr-6 bg-card border"}`}
                   >
                     <p className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
                       {message.role}
@@ -125,7 +136,7 @@ export default function InquiryPage() {
                     <p>{message.text}</p>
                   </div>
                 ))}
-                {loading ? <div className="rounded bg-white p-2 text-sm">Thinking...</div> : null}
+                {loading ? <div className="rounded border bg-card p-2 text-sm">Thinking...</div> : null}
               </div>
               <div className="space-y-2">
                 <Textarea

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { analysisData, customerData, documentsData, inquiryData, riskData, summaryData } from "@/lib/mock-data/data";
+import { getAnalysis, getCustomer, getDocuments, getInquiry, getRisk, getSummary } from "@/lib/mock-data/api";
 
 const RequestSchema = z.object({
   question: z.string().min(2),
@@ -8,17 +8,25 @@ const RequestSchema = z.object({
   basis: z.string().optional(),
 });
 
-function buildSnapshot() {
-  const revenue = summaryData.metrics.find((m) => m.id === "revenue-ltm")?.value ?? "N/A";
-  const reportedEbitda = summaryData.metrics.find((m) => m.id === "reported-ebitda")?.value ?? "N/A";
-  const adjustedEbitda = summaryData.metrics.find((m) => m.id === "adjusted-ebitda")?.value ?? "N/A";
-  const cashConversion = summaryData.metrics.find((m) => m.id === "cash-conv")?.value ?? "N/A";
-  const overallRisk = `${riskData.riskScore.toFixed(1)} / 10`;
-  const top10Concentration = customerData.metrics.find((m) => m.id === "cust-top10")?.value ?? "N/A";
-  const openBlockingInquiries = inquiryData.filter((i) => i.blocking && i.status !== "Closed").length;
-  const tieoutFails = riskData.tieOuts.filter((t) => t.status === "Fail").length;
-  const tieoutWarns = riskData.tieOuts.filter((t) => t.status === "Warn").length;
-  const missingDocs = documentsData.coverage.reduce((acc, row) => acc + row.months.filter((m) => m.status === "Missing").length, 0);
+function buildSnapshot(params: {
+  summary: Awaited<ReturnType<typeof getSummary>>;
+  analysis: Awaited<ReturnType<typeof getAnalysis>>;
+  risk: Awaited<ReturnType<typeof getRisk>>;
+  documents: Awaited<ReturnType<typeof getDocuments>>;
+  customer: Awaited<ReturnType<typeof getCustomer>>;
+  inquiry: Awaited<ReturnType<typeof getInquiry>>;
+}) {
+  const { summary, analysis, risk, documents, customer, inquiry } = params;
+  const revenue = summary.metrics.find((m) => m.id === "revenue-ltm")?.value ?? "N/A";
+  const reportedEbitda = summary.metrics.find((m) => m.id === "reported-ebitda")?.value ?? "N/A";
+  const adjustedEbitda = summary.metrics.find((m) => m.id === "adjusted-ebitda")?.value ?? "N/A";
+  const cashConversion = summary.metrics.find((m) => m.id === "cash-conv")?.value ?? "N/A";
+  const overallRisk = `${risk.riskScore.toFixed(1)} / 10`;
+  const top10Concentration = customer.metrics.find((m) => m.id === "cust-top10")?.value ?? "N/A";
+  const openBlockingInquiries = inquiry.inquiries.filter((i) => i.blocking && i.status !== "Closed").length;
+  const tieoutFails = risk.tieOuts.filter((t) => t.status === "Fail").length;
+  const tieoutWarns = risk.tieOuts.filter((t) => t.status === "Warn").length;
+  const missingDocs = documents.coverage.reduce((acc, row) => acc + row.months.filter((m) => m.status === "Missing").length, 0);
 
   return {
     revenue,
@@ -31,9 +39,9 @@ function buildSnapshot() {
     tieoutFails,
     tieoutWarns,
     missingDocs,
-    riskHotspots: [...riskData.dimensions].sort((a, b) => b.score - a.score).slice(0, 3),
-    recentChanges: summaryData.deltaFeed.slice(0, 4).map((d) => `${d.type}: ${d.message}`),
-    highRiskAddbacks: analysisData.qoeMetrics.find((m) => m.id === "qoe-highrisk")?.value ?? "N/A",
+    riskHotspots: [...risk.dimensions].sort((a, b) => b.score - a.score).slice(0, 3),
+    recentChanges: summary.deltaFeed.slice(0, 4).map((d) => `${d.type}: ${d.message}`),
+    highRiskAddbacks: analysis.qoeMetrics.find((m) => m.id === "qoe-highrisk")?.value ?? "N/A",
   };
 }
 
@@ -146,26 +154,42 @@ async function callOpenAI(question: string, snapshotText: string) {
 }
 
 export async function POST(request: Request) {
-  const body = RequestSchema.parse(await request.json());
-  const snapshot = buildSnapshot();
-  const snapshotText = formatSnapshot(snapshot);
-
   try {
-    const llm = await callOpenAI(body.question, snapshotText);
-    if (llm) {
-      return Response.json({
-        answer: llm.answer,
-        mode: "llm",
-        model: llm.model,
-      });
-    }
-  } catch {
-    // fall through to deterministic answer
-  }
+    const body = RequestSchema.parse(await request.json());
+    const [summary, analysis, risk, documents, customer, inquiry] = await Promise.all([
+      getSummary(body.period ?? null, body.basis ?? null, body.deal ?? null, { withDelay: false }),
+      getAnalysis(body.period ?? null, body.basis ?? null, body.deal ?? null, { withDelay: false }),
+      getRisk(body.deal ?? null, body.period ?? null, body.basis ?? null, { withDelay: false }),
+      getDocuments(body.deal ?? null, { withDelay: false }),
+      getCustomer(body.period ?? null, body.basis ?? null, body.deal ?? null, { withDelay: false }),
+      getInquiry(body.deal ?? null, body.period ?? null, body.basis ?? null, { withDelay: false }),
+    ]);
+    const snapshot = buildSnapshot({ summary, analysis, risk, documents, customer, inquiry });
+    const snapshotText = formatSnapshot(snapshot);
 
-  return Response.json({
-    answer: fallbackAnswer(body.question, snapshot),
-    mode: "fallback",
-    model: "dashboard-rules-v1",
-  });
+    try {
+      const llm = await callOpenAI(body.question, snapshotText);
+      if (llm) {
+        return Response.json({
+          answer: llm.answer,
+          mode: "llm",
+          model: llm.model,
+        });
+      }
+    } catch {
+      // fall through to deterministic answer
+    }
+
+    return Response.json({
+      answer: fallbackAnswer(body.question, snapshot),
+      mode: "fallback",
+      model: "dashboard-rules-v1",
+    });
+  } catch {
+    return Response.json({
+      answer: "I could not process that request. Please try again with a clearer question.",
+      mode: "fallback",
+      model: "dashboard-rules-v1",
+    });
+  }
 }

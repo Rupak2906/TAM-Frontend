@@ -13,11 +13,13 @@ export function DataTable<T extends { id?: string }>({
   columns,
   rows,
   onRowClick,
+  rowClassName,
 }: {
   title?: string;
   columns: ColumnDef<T>[];
   rows: T[];
   onRowClick?: (row: T) => void;
+  rowClassName?: (row: T) => string;
 }) {
   return (
     <Card>
@@ -38,7 +40,12 @@ export function DataTable<T extends { id?: string }>({
             </THead>
             <TBody>
               {rows.map((row, idx) => (
-                <TR key={row.id ?? idx} onClick={() => onRowClick?.(row)} className={onRowClick ? "cursor-pointer" : ""}>
+                <TR
+                  key={row.id ?? idx}
+                  data-rowid={String(row.id ?? idx)}
+                  onClick={() => onRowClick?.(row)}
+                  className={`${onRowClick ? "cursor-pointer" : ""} ${rowClassName ? rowClassName(row) : ""}`}
+                >
                   {columns.map((c) => (
                     <TD key={String(c.key)}>{c.render ? c.render(row) : String((row as Record<string, unknown>)[String(c.key)] ?? "")}</TD>
                   ))}

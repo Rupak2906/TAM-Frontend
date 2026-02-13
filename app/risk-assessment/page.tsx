@@ -14,10 +14,16 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatPct } from "@/lib/utils/format";
 import type { Severity } from "@/lib/schemas/types";
+import { useGlobalStore } from "@/lib/store/use-global-store";
 
 export default function RiskAssessmentPage() {
   const router = useRouter();
-  const query = useApiQuery(["risk"], "/api/deal/risk", RiskResponseSchema);
+  const { deal, period, basis } = useGlobalStore();
+  const query = useApiQuery(
+    ["risk", deal, period, basis],
+    `/api/deal/risk?deal=${encodeURIComponent(deal)}&period=${encodeURIComponent(period)}&basis=${encodeURIComponent(basis)}`,
+    RiskResponseSchema
+  );
   const [selectedRisk, setSelectedRisk] = useState<z.infer<typeof RiskRegisterRowSchema> | null>(null);
 
   if (query.isLoading || !query.data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
@@ -45,11 +51,41 @@ export default function RiskAssessmentPage() {
             : "Data Quality Risk",
   }));
   const anomalyRows = [
-    { metric: "Discount rate variance (%)", current: "6.8%", prior: "4.0%", variance: "+2.8ppt", status: "Warn" },
-    { metric: "Margin outliers by product/customer", current: "3 outliers", prior: "1 outlier", variance: "+2", status: "Warn" },
-    { metric: "Payroll spikes (% change)", current: "+12.4%", prior: "+4.9%", variance: "+7.5ppt", status: "Warn" },
-    { metric: "Refunds / credits as % of revenue", current: "2.7%", prior: "1.8%", variance: "+0.9ppt", status: "Pass" },
-    { metric: "Manual journal entry volume (%)", current: "9.6%", prior: "7.0%", variance: "+2.6ppt", status: "Warn" },
+    {
+      metric: "Discount rate variance (%)",
+      current: `${(Math.max(3.2, data.riskScore + 0.6)).toFixed(1)}%`,
+      prior: `${(Math.max(2.2, data.riskScore - 1.1)).toFixed(1)}%`,
+      variance: `+${(1.7).toFixed(1)}ppt`,
+      status: data.riskScore >= 5.5 ? "Warn" : "Pass",
+    },
+    {
+      metric: "Margin outliers by product/customer",
+      current: `${Math.max(1, Math.round(data.dimensions[3]?.score / 2))} outliers`,
+      prior: `${Math.max(1, Math.round((data.dimensions[3]?.score ?? 4) / 3))} outlier`,
+      variance: `+${Math.max(0, Math.round((data.dimensions[3]?.score ?? 4) / 2) - 1)}`,
+      status: (data.dimensions[3]?.score ?? 4) >= 6 ? "Warn" : "Pass",
+    },
+    {
+      metric: "Payroll spikes (% change)",
+      current: `+${(6 + (data.dimensions[4]?.score ?? 5)).toFixed(1)}%`,
+      prior: `+${(3.5 + (data.dimensions[4]?.score ?? 5) / 2).toFixed(1)}%`,
+      variance: `+${(2.5 + (data.dimensions[4]?.score ?? 5) / 2).toFixed(1)}ppt`,
+      status: (data.dimensions[4]?.score ?? 5) >= 6 ? "Warn" : "Pass",
+    },
+    {
+      metric: "Refunds / credits as % of revenue",
+      current: `${(1.4 + (data.dimensions[2]?.score ?? 5) / 3).toFixed(1)}%`,
+      prior: `${(1.1 + (data.dimensions[2]?.score ?? 5) / 4).toFixed(1)}%`,
+      variance: `+${(0.4 + (data.dimensions[2]?.score ?? 5) / 10).toFixed(1)}ppt`,
+      status: (data.dimensions[2]?.score ?? 5) >= 7 ? "Warn" : "Pass",
+    },
+    {
+      metric: "Manual journal entry volume (%)",
+      current: `${(6.4 + (data.dimensions[0]?.score ?? 5) / 2).toFixed(1)}%`,
+      prior: `${(5.1 + (data.dimensions[0]?.score ?? 5) / 3).toFixed(1)}%`,
+      variance: `+${(1.2 + (data.dimensions[0]?.score ?? 5) / 8).toFixed(1)}ppt`,
+      status: (data.dimensions[0]?.score ?? 5) >= 6 ? "Warn" : "Pass",
+    },
   ];
 
   return (
@@ -70,7 +106,7 @@ export default function RiskAssessmentPage() {
                   background: `conic-gradient(#f97316 ${gaugeFillPct}%, #e2e8f0 ${gaugeFillPct}% 100%)`,
                 }}
               >
-                <div className="grid h-16 w-16 place-items-center rounded-full bg-white text-lg font-bold">
+                <div className="grid h-16 w-16 place-items-center rounded-full bg-card text-lg font-bold">
                   {data.riskScore.toFixed(1)}
                 </div>
               </div>
@@ -80,13 +116,13 @@ export default function RiskAssessmentPage() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="rounded bg-rose-50 p-2"><p className="font-semibold text-rose-700">{redCount}</p><p>Red</p></div>
-              <div className="rounded bg-amber-50 p-2"><p className="font-semibold text-amber-700">{amberCount}</p><p>Amber</p></div>
-              <div className="rounded bg-emerald-50 p-2"><p className="font-semibold text-emerald-700">{greenCount}</p><p>Green</p></div>
+              <div className="rounded bg-rose-100 p-2 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200"><p className="font-semibold">{redCount}</p><p>Red</p></div>
+              <div className="rounded bg-amber-100 p-2 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200"><p className="font-semibold">{amberCount}</p><p>Amber</p></div>
+              <div className="rounded bg-emerald-100 p-2 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200"><p className="font-semibold">{greenCount}</p><p>Green</p></div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-center text-xs">
-              <div className="rounded bg-white p-2 border"><p className="font-semibold">{openRiskCount}</p><p>Open Risks</p></div>
-              <div className="rounded bg-white p-2 border"><p className="font-semibold">{resolvedRiskCount}</p><p>Resolved Risks</p></div>
+              <div className="rounded border bg-card p-2"><p className="font-semibold">{openRiskCount}</p><p>Open Risks</p></div>
+              <div className="rounded border bg-card p-2"><p className="font-semibold">{resolvedRiskCount}</p><p>Resolved Risks</p></div>
             </div>
           </CardContent>
         </Card>
@@ -95,7 +131,7 @@ export default function RiskAssessmentPage() {
           <CardHeader><CardTitle>Risk Hotspots</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {topRisks.map((risk) => (
-              <div key={risk.subject} className="rounded border bg-white p-3">
+              <div key={risk.subject} className="rounded border bg-card p-3">
                 <div className="mb-1 flex items-center justify-between text-sm">
                   <span className="font-medium">{risk.subject}</span>
                   <span className="font-semibold">{risk.score.toFixed(1)} / 10</span>

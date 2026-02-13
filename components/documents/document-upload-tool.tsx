@@ -118,7 +118,7 @@ export function DocumentUploadTool({
       </CardHeader>
       <CardContent className="space-y-3">
         <div
-          className={`rounded-lg border-2 border-dashed p-6 text-center transition ${dragActive ? "border-primary bg-primary/5" : "border-border bg-white"}`}
+          className={`rounded-lg border-2 border-dashed p-6 text-center transition ${dragActive ? "border-primary bg-primary/5" : "border-border bg-card"}`}
           onDragOver={(e) => {
             e.preventDefault();
             setDragActive(true);
@@ -151,7 +151,7 @@ export function DocumentUploadTool({
         {uploads.length > 0 ? (
           <div className="space-y-2">
             {uploads.slice(0, 6).map((item) => (
-              <div key={item.id} className="rounded border bg-white p-3">
+              <div key={item.id} className="rounded border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between gap-2 text-sm">
                   <span className="inline-flex items-center gap-2 font-medium"><FileIcon className="h-4 w-4" />{item.name}</span>
                   <span className="text-xs text-muted-foreground">{item.sizeLabel}</span>

@@ -19,7 +19,7 @@ export default function CustomerAnalyticsPage() {
   if (query.isLoading || !query.data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
   if (query.data.metrics.length === 0) {
     return (
-      <div className="rounded-lg border bg-white p-6 text-sm text-muted-foreground">
+      <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
         No customer data available for the selected deal/period.
       </div>
     );
@@ -35,14 +35,14 @@ export default function CustomerAnalyticsPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Revenue by top customers trend" steps={steps} renderChart={(expanded) => <TrendLineChart data={trend} expanded={expanded} />} />
-        <ChartCard title="Discount anomaly monitor" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="month" data={query.data.discountAnomalies.map((d) => ({ month: d.month, rate: Number((d.rate * 100).toFixed(2)), priorRate: Number((d.priorRate * 100).toFixed(2)) }))} bars={[{ key: "rate", color: "#f97316" }, { key: "priorRate", color: "#64748b" }]} />} />
+        <ChartCard title="Discount anomaly monitor" steps={steps} renderChart={(expanded) => <BarCompareChart expanded={expanded} xKey="month" data={query.data.discountAnomalies.map((d) => ({ month: d.month, rate: Number((d.rate * 100).toFixed(2)), priorRate: Number((d.priorRate * 100).toFixed(2)) }))} bars={[{ key: "rate", color: "#fb923c" }, { key: "priorRate", color: "#94a3b8" }]} />} />
       </div>
 
       <Card>
         <CardHeader><CardTitle>Anomaly Rule Results</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {query.data.discountAnomalies.map((d) => (
-            <div key={d.month} className="flex items-center justify-between rounded border bg-white p-2 text-sm">
+            <div key={d.month} className="flex items-center justify-between rounded border bg-card p-2 text-sm">
               <span>{d.month}</span>
               <span>Current {(d.rate * 100).toFixed(2)}% vs Prior {(d.priorRate * 100).toFixed(2)}%</span>
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${d.flagged ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>

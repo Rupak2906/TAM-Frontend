@@ -126,14 +126,16 @@ export default function OnboardingPage() {
       clearInterval(stageTimer);
       clearTimeout(completeTimer);
     };
-  }, [analyzing, router]);
+  }, [analyzing, companyName, currency, fiscalYearEnd, hqRegion, router, sector, setDeal, subSector]);
 
   const summary = useMemo(() => {
     if (!uploadedFiles.length) return "No files uploaded yet";
     const uniqueTypes = new Set(uploadedFiles.map((f) => f.detectedType));
     return `${uploadedFiles.length} file(s), ${uniqueTypes.size} detected schedule type(s)`;
   }, [uploadedFiles]);
+  const stageProgress = ((stageIndex + 1) / loadingStages.length) * 100;
   const hasRequiredCompanyFields = companyName.trim().length > 1 && sector.trim().length > 1;
+  const uploadStorageKey = companyName.trim().length > 1 ? `tam-uploaded-files:${companyName.trim()}` : "tam-uploaded-files";
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 px-6 py-10 text-slate-100">
@@ -209,6 +211,7 @@ export default function OnboardingPage() {
                 setUploadedFiles((prev) => {
                   const next = [...rows, ...prev];
                   const dedup = next.filter((row, idx, arr) => arr.findIndex((x) => x.file === row.file) === idx);
+                  window.localStorage.setItem(uploadStorageKey, JSON.stringify(dedup));
                   window.localStorage.setItem("tam-uploaded-files", JSON.stringify(dedup));
                   return dedup;
                 });
@@ -254,8 +257,27 @@ export default function OnboardingPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">TAM Neural Analysis Engine</p>
             <h2 className="mt-2 text-2xl font-semibold">Building your due diligence intelligence stack</h2>
 
-            <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-700">
-              <div className="h-full tam-loading-bar bg-gradient-to-r from-cyan-400 via-emerald-400 to-sky-300" />
+            <div className="mt-5 rounded-2xl border border-cyan-300/35 bg-black/40 p-4">
+              <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.16em] text-cyan-200/90">
+                <span>Pipeline Throughput</span>
+                <span>{Math.round(stageProgress)}%</span>
+              </div>
+              <div className="relative h-3 overflow-hidden rounded-full bg-slate-700/90">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-300 to-emerald-300 transition-[width] duration-700 ease-out"
+                  style={{ width: `${stageProgress}%` }}
+                />
+                <div className="pointer-events-none absolute inset-0 tam-loading-scan" />
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800/90">
+                <div className="h-full tam-loading-bar bg-gradient-to-r from-cyan-400 via-emerald-400 to-sky-300" />
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <span className="tam-loading-dot" />
+                <span className="tam-loading-dot" style={{ animationDelay: "0.2s" }} />
+                <span className="tam-loading-dot" style={{ animationDelay: "0.4s" }} />
+                <p className="text-xs text-slate-300">Crunching trial balance, ledgers, tie-outs, and anomaly checks...</p>
+              </div>
             </div>
 
             <div className="mt-6 grid gap-3 md:grid-cols-5">

@@ -12,14 +12,23 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { SeverityBadge } from "@/components/severity-badge";
 import { DocumentUploadTool } from "@/components/documents/document-upload-tool";
+import { useGlobalStore } from "@/lib/store/use-global-store";
+import { X } from "lucide-react";
 
 export default function DocumentsPage() {
   const router = useRouter();
   const params = useSearchParams();
   const highlightedFile = params.get("file");
-  const query = useApiQuery(["documents"], "/api/deal/documents", DocumentsResponseSchema);
+  const { deal } = useGlobalStore();
+  const query = useApiQuery(
+    ["documents", deal],
+    `/api/deal/documents?deal=${encodeURIComponent(deal)}`,
+    DocumentsResponseSchema
+  );
   const [selectedFile, setSelectedFile] = useState<z.infer<typeof FileInventorySchema> | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<z.infer<typeof FileInventorySchema>[]>([]);
+  const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
+  const storageKey = `tam-uploaded-files:${deal}`;
 
   const legend = useMemo(() => ({ Available: "bg-emerald-200", Partial: "bg-amber-200", Missing: "bg-rose-200" }), []);
   const inventoryRows = useMemo(
@@ -29,18 +38,41 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem("tam-uploaded-files");
+      const raw = window.localStorage.getItem(storageKey) ?? window.localStorage.getItem("tam-uploaded-files");
       if (!raw) return;
       const parsed = JSON.parse(raw) as z.infer<typeof FileInventorySchema>[];
       setUploadedFiles(parsed);
     } catch {
       setUploadedFiles([]);
     }
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
-    window.localStorage.setItem("tam-uploaded-files", JSON.stringify(uploadedFiles));
-  }, [uploadedFiles]);
+    window.localStorage.setItem(storageKey, JSON.stringify(uploadedFiles));
+  }, [uploadedFiles, storageKey]);
+
+  useEffect(() => {
+    if (!highlightedFile || inventoryRows.length === 0) return;
+    const normalized = highlightedFile.trim().toLowerCase();
+    const matched = inventoryRows.find((row) => row.file.trim().toLowerCase() === normalized);
+    if (!matched) return;
+
+    setHighlightedRowId(matched.id);
+    setSelectedFile(matched);
+
+    const scrollTimer = window.setTimeout(() => {
+      const node = document.querySelector(`[data-rowid="${matched.id}"]`);
+      if (node instanceof HTMLElement) {
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 180);
+
+    const clearTimer = window.setTimeout(() => setHighlightedRowId(null), 2400);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [highlightedFile, inventoryRows]);
 
   if (query.isLoading || !query.data) return <div className="grid gap-4"><div className="h-72 animate-pulse rounded-lg bg-muted" /><div className="h-72 animate-pulse rounded-lg bg-muted" /></div>;
 
@@ -49,6 +81,7 @@ export default function DocumentsPage() {
       <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Documents</h2><p className="text-xs text-muted-foreground">Last updated: {formatDateTime(query.data.lastUpdated)}</p></div>
 
       <DocumentUploadTool
+        entityName={deal}
         onFilesProcessed={(rows) =>
           setUploadedFiles((prev) => {
             const merged = [...rows, ...prev];
@@ -92,6 +125,11 @@ export default function DocumentsPage() {
         title="File inventory"
         rows={inventoryRows}
         onRowClick={(row) => setSelectedFile(row)}
+        rowClassName={(row) => {
+          if (selectedFile?.id === row.id) return "tam-row-active";
+          if (highlightedRowId && row.id === highlightedRowId) return "tam-source-highlight";
+          return "";
+        }}
         columns={[
           { key: "file", header: "File", render: (r) => <span className={r.file === highlightedFile ? "font-semibold text-primary" : ""}>{r.file}</span> },
           { key: "detectedType", header: "Detected Type" },
@@ -106,7 +144,7 @@ export default function DocumentsPage() {
         <CardHeader><CardTitle>Missing / PBC suggestions</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {query.data.pbc.map((pbc) => (
-            <div key={pbc.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-white p-3">
+            <div key={pbc.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-card p-3">
               <div>
                 <p className="font-medium">{pbc.request}</p>
                 <p className="text-xs text-muted-foreground">Owner: {pbc.owner}</p>
@@ -121,14 +159,29 @@ export default function DocumentsPage() {
       </Card>
 
       <Sheet open={!!selectedFile} onOpenChange={(v) => !v && setSelectedFile(null)}>
-        <SheetContent side="right" className="w-[420px]">
+        <SheetContent
+          side="right"
+          className="w-[420px] overflow-hidden rounded-l-[34px] border-l border-slate-300/60 bg-gradient-to-b from-slate-100 to-slate-200 shadow-[-20px_0_46px_rgba(15,23,42,0.2)] dark:border-cyan-400/30 dark:from-slate-900 dark:to-slate-950 dark:shadow-[-22px_0_52px_rgba(34,211,238,0.18)]"
+        >
           {selectedFile ? (
-            <div className="space-y-3">
+            <div className="relative space-y-3">
+              <button
+                type="button"
+                aria-label="Close preview"
+                onClick={() => setSelectedFile(null)}
+                className="absolute right-0 top-0 rounded-full border border-border bg-card/85 p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="pointer-events-none absolute -left-12 top-10 h-44 w-44 rounded-full bg-sky-200/18 blur-3xl dark:bg-cyan-400/20" />
+              <div className="pointer-events-none absolute -left-6 bottom-20 h-36 w-36 rounded-full bg-emerald-200/14 blur-3xl dark:bg-emerald-400/12" />
               <h3 className="text-lg font-semibold">File Preview</h3>
               <p className="text-sm"><span className="font-semibold">File:</span> {selectedFile.file}</p>
               <p className="text-sm"><span className="font-semibold">Type:</span> {selectedFile.detectedType}</p>
               <p className="text-sm"><span className="font-semibold">Coverage:</span> {selectedFile.periodCoverage}</p>
-              <div className="rounded border bg-muted/30 p-3 text-sm">Mock preview pane for parsed sheet structure and detected mappings.</div>
+              <div className="relative rounded-2xl border border-cyan-300/55 bg-cyan-100/40 p-3 text-sm shadow-[0_10px_25px_rgba(14,165,233,0.15)] dark:border-cyan-400/45 dark:bg-cyan-500/14 dark:shadow-[0_12px_30px_rgba(34,211,238,0.18)]">
+                Mock preview pane for parsed sheet structure and detected mappings.
+              </div>
             </div>
           ) : null}
         </SheetContent>

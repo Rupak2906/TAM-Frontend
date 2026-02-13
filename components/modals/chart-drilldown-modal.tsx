@@ -33,13 +33,13 @@ export function ChartDrilldownModal({
             View TAM Build Steps
           </Button>
         </div>
-        <div className="rounded-lg border bg-white p-3">{renderChart(true)}</div>
+        <div className="rounded-lg border bg-card p-3">{renderChart(true)}</div>
         {showSteps ? (
           <div className="mt-4 rounded-lg border bg-muted/30 p-3">
             <p className="mb-2 font-semibold">TAM Build Steps (Data provenance)</p>
             <div className="space-y-2">
               {steps.map((step, idx) => (
-                <div key={idx} className="rounded border bg-white p-3">
+                <div key={idx} className="rounded border bg-card p-3">
                   <p className="font-medium">{step.title}</p>
                   <p className="text-sm text-muted-foreground">{step.description}</p>
                   <p className="mt-1 text-xs">References: {step.references.join(" | ")}</p>

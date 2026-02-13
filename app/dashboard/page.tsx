@@ -115,7 +115,7 @@ export default function DashboardPage() {
           <CardHeader><CardTitle>What changed since last run?</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {data.deltaFeed.map((item) => (
-              <div key={item.id} className="rounded-md border bg-white p-3">
+              <div key={item.id} className="rounded-md border bg-card p-3">
                 <p className="text-xs uppercase text-muted-foreground">{item.type}</p>
                 <p className="text-sm font-medium">{item.message}</p>
                 <p className="text-xs text-muted-foreground">{formatDateTime(item.timestamp)}</p>

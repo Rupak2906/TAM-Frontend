@@ -32,7 +32,7 @@ export default function NotesPage() {
         <CardHeader><CardTitle>Report Draft Snippets</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {reportDraft.length === 0 ? <p className="text-sm text-muted-foreground">No methodology snippets yet.</p> : reportDraft.map((snippet, i) => (
-            <div key={i} className="rounded border bg-white p-2 text-sm">{snippet}</div>
+            <div key={i} className="rounded border bg-card p-2 text-sm">{snippet}</div>
           ))}
         </CardContent>
       </Card>
