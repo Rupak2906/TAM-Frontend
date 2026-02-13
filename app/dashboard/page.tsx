@@ -59,6 +59,10 @@ export default function DashboardPage() {
   const reportedLtm = data.trend.reduce((sum, t) => sum + t.reportedEbitda, 0);
   const adjPct = ((adjustedLtm - reportedLtm) / Math.max(reportedLtm, 0.1)) * 100;
   const averageCashConv = data.trend.reduce((sum, t) => sum + t.cashConversion, 0) / data.trend.length;
+  const riskValue = data.metrics.find((m) => m.id === "overall-risk")?.value ?? "6.0 / 10";
+  const riskScore = Number(riskValue.split("/")[0]?.trim()) || 6;
+  const valuationMultiple = Math.max(5.5, Math.min(13.5, 11.5 - riskScore * 0.55 + revenueGrowthYoY * 0.04));
+  const predictedValuation = adjustedLtm * valuationMultiple;
   const additionalExecutiveMetrics: Metric[] = [
     createMetric("rev-growth", "Revenue Growth % (YoY / QoQ)", `${revenueGrowthYoY.toFixed(1)}% / ${revenueGrowthQoQ.toFixed(1)}%`, "Revenue Growth % = (Current Revenue - Prior Revenue) / Prior Revenue", `${(revenueGrowthQoQ / 4).toFixed(1)}ppt`),
     createMetric("ebitda-margin-vs", "EBITDA Margin (Reported vs Adjusted)", `${((reportedLtm / (revenueAvg * 12)) * 100).toFixed(1)}% / ${((adjustedLtm / (revenueAvg * 12)) * 100).toFixed(1)}%`, "EBITDA Margin % = EBITDA / Revenue"),
@@ -76,9 +80,20 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">Executive Overview</h2>
-        <p className="text-xs text-muted-foreground">Last refresh: {formatDateTime(data.lastUpdated)}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">Executive Overview</h2>
+          <p className="text-xs text-muted-foreground">Last refresh: {formatDateTime(data.lastUpdated)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Predicted Valuation (AI)</p>
+          <p className="text-4xl font-semibold leading-tight tracking-tight text-foreground">
+            ${predictedValuation.toFixed(1)}M
+          </p>
+          <p className="text-sm font-medium tracking-wide text-muted-foreground">
+            {valuationMultiple.toFixed(1)}x Adj. EBITDA
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
