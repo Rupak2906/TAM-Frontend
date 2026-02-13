@@ -101,12 +101,13 @@ export default function RiskAssessmentPage() {
           <CardContent className="space-y-3">
             <div className="flex items-center gap-4">
               <div
-                className="grid h-24 w-24 place-items-center rounded-full"
+                className="grid h-24 w-24 shrink-0 place-items-center rounded-full"
                 style={{
+                  aspectRatio: "1 / 1",
                   background: `conic-gradient(#f97316 ${gaugeFillPct}%, #e2e8f0 ${gaugeFillPct}% 100%)`,
                 }}
               >
-                <div className="grid h-16 w-16 place-items-center rounded-full bg-card text-lg font-bold">
+                <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-card text-lg font-bold" style={{ aspectRatio: "1 / 1" }}>
                   {data.riskScore.toFixed(1)}
                 </div>
               </div>
