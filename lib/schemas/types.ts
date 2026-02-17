@@ -121,6 +121,28 @@ export const InquiryResponseSchema = z.object({
   inquiries: z.array(InquirySchema),
 });
 
+export const DecisionQueueItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  impactArea: z.string(),
+  impactScore: z.number(),
+  owner: z.string(),
+  dueDate: z.string(),
+  status: z.enum(["Open", "In Progress", "Resolved", "Deferred"]),
+  blocking: z.boolean(),
+  rationale: z.string(),
+  sourceTab: z.enum(["risk-assessment", "inquiry", "documents", "financial-analysis"]),
+  sourceId: z.string(),
+  sourceLabel: z.string(),
+  sourceUrl: z.string(),
+});
+
+export const DecisionQueueResponseSchema = z.object({
+  lastUpdated: z.string(),
+  readiness: z.enum(["Ready", "Draft", "Blocked"]),
+  items: z.array(DecisionQueueItemSchema),
+});
+
 export const SummaryResponseSchema = z.object({
   lastUpdated: z.string(),
   metrics: z.array(MetricSchema),
@@ -174,3 +196,5 @@ export type DocumentsResponse = z.infer<typeof DocumentsResponseSchema>;
 export type CustomerResponse = z.infer<typeof CustomerResponseSchema>;
 export type Inquiry = z.infer<typeof InquirySchema>;
 export type InquiryResponse = z.infer<typeof InquiryResponseSchema>;
+export type DecisionQueueItem = z.infer<typeof DecisionQueueItemSchema>;
+export type DecisionQueueResponse = z.infer<typeof DecisionQueueResponseSchema>;

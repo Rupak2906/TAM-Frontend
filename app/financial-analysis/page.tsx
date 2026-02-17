@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { KpiCard } from "@/components/kpi-card";
 import { ChartCard } from "@/components/charts/chart-card";
@@ -43,6 +43,7 @@ export default function FinancialAnalysisPage() {
   const params = useSearchParams();
   const router = useRouter();
   const sub = (params.get("sub") as SubTab) || "qoe";
+  const focusedAdjustmentId = params.get("focus") === "adjustment" ? params.get("id") : null;
   const { deal, period, basis } = useGlobalStore();
   const query = useApiQuery(
     ["analysis", deal, period, basis],
@@ -50,10 +51,30 @@ export default function FinancialAnalysisPage() {
     AnalysisResponseSchema
   );
   const [statementMetric, setStatementMetric] = useState<Metric | null>(null);
-
-  if (query.isLoading || !query.data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
-
+  const [highlightedAdjustmentId, setHighlightedAdjustmentId] = useState<string | null>(null);
   const data = query.data;
+  useEffect(() => {
+    if (sub !== "qoe" || !focusedAdjustmentId || !data) return;
+    const target = data.adjustments.find((row) => row.id.toLowerCase() === focusedAdjustmentId.toLowerCase());
+    if (!target) return;
+    setHighlightedAdjustmentId(target.id);
+
+    const scrollTimer = window.setTimeout(() => {
+      const node = document.querySelector(`[data-adjustment-id="${target.id}"]`);
+      if (node instanceof HTMLElement) {
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 220);
+
+    const clearTimer = window.setTimeout(() => setHighlightedAdjustmentId(null), 2200);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [data, focusedAdjustmentId, sub]);
+
+  if (query.isLoading || !data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
+
   const steps = data.qoeMetrics[0].lineage;
   const metricTemplate = data.qoeMetrics[0];
   const createMetric = (
@@ -120,11 +141,25 @@ export default function FinancialAnalysisPage() {
             <CardHeader><CardTitle>Adjustment register</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {Array.from(new Set(data.adjustments.map((a) => a.category))).map((category) => (
-                <details key={category} className="rounded border bg-card p-2">
+                <details
+                  key={category}
+                  className="rounded border bg-card p-2"
+                  defaultOpen={
+                    focusedAdjustmentId && data.adjustments.some((a) => a.category === category && a.id.toLowerCase() === focusedAdjustmentId.toLowerCase())
+                      ? true
+                      : undefined
+                  }
+                >
                   <summary className="cursor-pointer font-semibold">{category}</summary>
                   <div className="mt-2 space-y-2">
                     {data.adjustments.filter((a) => a.category === category).map((a) => (
-                      <div key={a.id} className="flex items-center justify-between rounded border p-2 text-sm">
+                      <div
+                        key={a.id}
+                        data-adjustment-id={a.id}
+                        className={`flex items-center justify-between rounded border p-2 text-sm ${
+                          highlightedAdjustmentId && a.id === highlightedAdjustmentId ? "tam-source-highlight" : ""
+                        }`}
+                      >
                         <div><p className="font-medium">{a.id} - {a.description}</p><p className="text-xs text-muted-foreground">Status: {a.status}</p></div>
                         <p className="font-semibold">${(a.amount / 1_000_000).toFixed(2)}M</p>
                       </div>

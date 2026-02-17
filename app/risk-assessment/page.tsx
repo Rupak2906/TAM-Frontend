@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartCard } from "@/components/charts/chart-card";
 import { RiskZoneMapChart } from "@/components/charts/common-charts";
@@ -18,6 +18,7 @@ import { useGlobalStore } from "@/lib/store/use-global-store";
 
 export default function RiskAssessmentPage() {
   const router = useRouter();
+  const params = useSearchParams();
   const { deal, period, basis } = useGlobalStore();
   const query = useApiQuery(
     ["risk", deal, period, basis],
@@ -25,9 +26,37 @@ export default function RiskAssessmentPage() {
     RiskResponseSchema
   );
   const [selectedRisk, setSelectedRisk] = useState<z.infer<typeof RiskRegisterRowSchema> | null>(null);
-
-  if (query.isLoading || !query.data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
+  const [highlightedTieOutId, setHighlightedTieOutId] = useState<string | null>(null);
   const data = query.data;
+  const focusedTieOutName = params.get("focus") === "tieout" ? params.get("name") : null;
+  const makeTieOutRowId = (name: string) => `tie-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const tieOutRows = useMemo(
+    () => (data?.tieOuts ?? []).map((row) => ({ ...row, id: makeTieOutRowId(row.name) })),
+    [data?.tieOuts]
+  );
+
+  useEffect(() => {
+    if (!focusedTieOutName || !data) return;
+    const target = data.tieOuts.find((row) => row.name.toLowerCase() === focusedTieOutName.toLowerCase());
+    if (!target) return;
+    const rowId = makeTieOutRowId(target.name);
+    setHighlightedTieOutId(rowId);
+
+    const scrollTimer = window.setTimeout(() => {
+      const node = document.querySelector(`[data-rowid="${rowId}"]`);
+      if (node instanceof HTMLElement) {
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 180);
+
+    const clearTimer = window.setTimeout(() => setHighlightedTieOutId(null), 2200);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [data, focusedTieOutName]);
+
+  if (query.isLoading || !data) return <div className="h-80 animate-pulse rounded-lg bg-muted" />;
   const overallSeverity: Severity = data.riskScore >= 7 ? "Red" : data.riskScore >= 4.5 ? "Amber" : "Green";
   const redCount = data.register.filter((r) => r.severity === "Red").length;
   const amberCount = data.register.filter((r) => r.severity === "Amber").length;
@@ -153,7 +182,8 @@ export default function RiskAssessmentPage() {
 
       <DataTable
         title="Tie-out scoreboard"
-        rows={data.tieOuts}
+        rows={tieOutRows}
+        rowClassName={(row) => (highlightedTieOutId && row.id === highlightedTieOutId ? "tam-source-highlight" : "")}
         columns={[
           { key: "name", header: "Check" },
           { key: "expected", header: "Expected", render: (r) => formatCurrency(r.expected) },

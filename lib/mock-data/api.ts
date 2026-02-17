@@ -1,4 +1,5 @@
 import { analysisData, customerData, documentsData, inquiryData, riskData, summaryData } from "@/lib/mock-data/data";
+import type { DecisionQueueResponse } from "@/lib/schemas/types";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -795,5 +796,128 @@ export async function getInquiry(
   return {
     lastUpdated: new Date().toISOString(),
     inquiries: dynamic,
+  };
+}
+
+export async function getDecisionQueue(
+  deal: string | null,
+  period: string | null,
+  basis: string | null,
+  options?: FetchOptions
+): Promise<DecisionQueueResponse> {
+  await withOptionalDelay(options);
+  const [summary, analysis, risk, docs, inquiry] = await Promise.all([
+    getSummary(period, basis, deal, { withDelay: false }),
+    getAnalysis(period, basis, deal, { withDelay: false }),
+    getRisk(deal, period, basis, { withDelay: false }),
+    getDocuments(deal, { withDelay: false }),
+    getInquiry(deal, period, basis, { withDelay: false }),
+  ]);
+
+  const failTieOuts = risk.tieOuts.filter((row) => row.status === "Fail");
+  const warnTieOuts = risk.tieOuts.filter((row) => row.status === "Warn");
+  const blockingInquiries = inquiry.inquiries.filter((row) => row.blocking && row.status !== "Closed");
+  const highRiskAdjustments = analysis.adjustments
+    .filter((row) => row.status !== "Accepted")
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3);
+  const missingCoverage = docs.coverage
+    .flatMap((schedule) => schedule.months.map((month) => ({ schedule: schedule.schedule, month })))
+    .filter((entry) => entry.month.status === "Missing")
+    .slice(0, 4);
+
+  const items = [
+    ...failTieOuts.map((tie, idx) => ({
+      id: `dq-risk-fail-${idx + 1}`,
+      title: `Resolve tie-out failure: ${tie.name}`,
+      impactArea: "Risk / Tie-out",
+      impactScore: Number((95 - idx * 4).toFixed(1)),
+      owner: "Finance Controller",
+      dueDate: "2026-03-05",
+      status: "Open" as const,
+      blocking: true,
+      rationale: `${tie.name} is failing at ${tie.variancePct.toFixed(2)}% vs tolerance ${tie.tolerancePct.toFixed(2)}%.`,
+      sourceTab: "risk-assessment" as const,
+      sourceId: tie.name,
+      sourceLabel: tie.name,
+      sourceUrl: `/risk-assessment?focus=tieout&name=${encodeURIComponent(tie.name)}`,
+    })),
+    ...warnTieOuts.slice(0, 2).map((tie, idx) => ({
+      id: `dq-risk-warn-${idx + 1}`,
+      title: `Tighten warning tie-out: ${tie.name}`,
+      impactArea: "Risk / Tie-out",
+      impactScore: Number((78 - idx * 3).toFixed(1)),
+      owner: "Deal Team",
+      dueDate: "2026-03-06",
+      status: "In Progress" as const,
+      blocking: idx === 0,
+      rationale: `${tie.name} sits in warning band at ${tie.variancePct.toFixed(2)}%.`,
+      sourceTab: "risk-assessment" as const,
+      sourceId: tie.name,
+      sourceLabel: tie.name,
+      sourceUrl: `/risk-assessment?focus=tieout&name=${encodeURIComponent(tie.name)}`,
+    })),
+    ...blockingInquiries.slice(0, 3).map((inq, idx) => ({
+      id: `dq-inquiry-${idx + 1}`,
+      title: `Close blocking inquiry: ${inq.request}`,
+      impactArea: "Inquiry / Readiness",
+      impactScore: Number((88 - idx * 5).toFixed(1)),
+      owner: inq.owner,
+      dueDate: inq.dueDate,
+      status: inq.status === "In Progress" ? ("In Progress" as const) : ("Open" as const),
+      blocking: true,
+      rationale: "Blocking inquiry directly gates report readiness and IC package quality.",
+      sourceTab: "inquiry" as const,
+      sourceId: inq.id,
+      sourceLabel: inq.id,
+      sourceUrl: `/inquiry?focus=inquiry&id=${encodeURIComponent(inq.id)}`,
+    })),
+    ...highRiskAdjustments.map((adj, idx) => ({
+      id: `dq-adjustment-${idx + 1}`,
+      title: `Validate adjustment support: ${adj.id}`,
+      impactArea: "QoE / Adjustments",
+      impactScore: Number((72 - idx * 2).toFixed(1)),
+      owner: "QoE Workstream Lead",
+      dueDate: "2026-03-07",
+      status: adj.status === "Reviewed" ? ("In Progress" as const) : ("Open" as const),
+      blocking: idx === 0,
+      rationale: `${adj.id} (${adj.status}) carries material impact of $${(adj.amount / 1_000_000).toFixed(2)}M.`,
+      sourceTab: "financial-analysis" as const,
+      sourceId: adj.id,
+      sourceLabel: `${adj.id} - ${adj.category}`,
+      sourceUrl: `/financial-analysis?sub=qoe&focus=adjustment&id=${encodeURIComponent(adj.id)}`,
+    })),
+    ...missingCoverage.map((gap, idx) => ({
+      id: `dq-docs-${idx + 1}`,
+      title: `Ingest missing document: ${gap.schedule} (${gap.month.month})`,
+      impactArea: "Documents / Data Integrity",
+      impactScore: Number((66 - idx * 2).toFixed(1)),
+      owner: "Data Room Owner",
+      dueDate: "2026-03-08",
+      status: "Open" as const,
+      blocking: idx === 0,
+      rationale: `Coverage gap on ${gap.schedule} for ${gap.month.month} reduces confidence and traceability.`,
+      sourceTab: "documents" as const,
+      sourceId: `${gap.schedule}-${gap.month.month}`,
+      sourceLabel: gap.schedule,
+      sourceUrl: `/documents?focus=coverage&schedule=${encodeURIComponent(gap.schedule)}&month=${encodeURIComponent(gap.month.month)}`,
+    })),
+  ]
+    .sort((a, b) => b.impactScore - a.impactScore)
+    .slice(0, 10);
+
+  const blockingCount = items.filter((item) => item.blocking).length;
+  const tieOutFailCount = failTieOuts.length;
+  const readiness: "Ready" | "Draft" | "Blocked" =
+    blockingCount > 0 || tieOutFailCount > 0
+      ? "Blocked"
+      : risk.riskScore >= 5.5
+        ? "Draft"
+        : "Ready";
+
+  return {
+    lastUpdated: summary.lastUpdated,
+    readiness,
+    items,
   };
 }

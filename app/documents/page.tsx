@@ -19,6 +19,8 @@ export default function DocumentsPage() {
   const router = useRouter();
   const params = useSearchParams();
   const highlightedFile = params.get("file");
+  const focusedCoverageSchedule = params.get("focus") === "coverage" ? params.get("schedule") : null;
+  const focusedCoverageMonth = params.get("focus") === "coverage" ? params.get("month") : null;
   const { deal } = useGlobalStore();
   const query = useApiQuery(
     ["documents", deal],
@@ -28,7 +30,9 @@ export default function DocumentsPage() {
   const [selectedFile, setSelectedFile] = useState<z.infer<typeof FileInventorySchema> | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<z.infer<typeof FileInventorySchema>[]>([]);
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
+  const [highlightedCoverageKey, setHighlightedCoverageKey] = useState<string | null>(null);
   const storageKey = `tam-uploaded-files:${deal}`;
+  const makeCoverageKey = (schedule: string, month: string) => `${schedule.toLowerCase()}::${month.toLowerCase()}`;
 
   const legend = useMemo(() => ({ Available: "bg-emerald-200", Partial: "bg-amber-200", Missing: "bg-rose-200" }), []);
   const inventoryRows = useMemo(
@@ -74,6 +78,30 @@ export default function DocumentsPage() {
     };
   }, [highlightedFile, inventoryRows]);
 
+  useEffect(() => {
+    if (!focusedCoverageSchedule || !focusedCoverageMonth || !query.data) return;
+    const schedule = query.data.coverage.find((row) => row.schedule.toLowerCase() === focusedCoverageSchedule.toLowerCase());
+    if (!schedule) return;
+    const month = schedule.months.find((m) => m.month.toLowerCase() === focusedCoverageMonth.toLowerCase());
+    if (!month) return;
+
+    const key = makeCoverageKey(schedule.schedule, month.month);
+    setHighlightedCoverageKey(key);
+
+    const scrollTimer = window.setTimeout(() => {
+      const node = document.querySelector(`[data-coverage-key="${key}"]`);
+      if (node instanceof HTMLElement) {
+        node.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      }
+    }, 180);
+
+    const clearTimer = window.setTimeout(() => setHighlightedCoverageKey(null), 2200);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [focusedCoverageMonth, focusedCoverageSchedule, query.data]);
+
   if (query.isLoading || !query.data) return <div className="grid gap-4"><div className="h-72 animate-pulse rounded-lg bg-muted" /><div className="h-72 animate-pulse rounded-lg bg-muted" /></div>;
 
   return (
@@ -110,7 +138,14 @@ export default function DocumentsPage() {
                     <td className="px-2 py-2 font-medium">{row.schedule}</td>
                     {row.months.map((cell) => (
                       <td key={cell.month} className="px-2 py-2">
-                        <div className={`mx-auto h-4 w-6 rounded ${legend[cell.status]}`} />
+                        <div
+                          data-coverage-key={makeCoverageKey(row.schedule, cell.month)}
+                          className={`mx-auto h-4 w-6 rounded ${legend[cell.status]} ${
+                            highlightedCoverageKey && highlightedCoverageKey === makeCoverageKey(row.schedule, cell.month)
+                              ? "ring-2 ring-cyan-500 ring-offset-2 ring-offset-background transition-all duration-300"
+                              : ""
+                          }`}
+                        />
                       </td>
                     ))}
                   </tr>

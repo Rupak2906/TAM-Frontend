@@ -1,21 +1,29 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { KpiCard } from "@/components/kpi-card";
 import { ChartCard } from "@/components/charts/chart-card";
 import { AreaTrendChart, TrendLineChart, WaterfallLikeChart } from "@/components/charts/common-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { useApiQuery } from "@/hooks/use-api-query";
-import { SummaryResponseSchema, type Metric } from "@/lib/schemas/types";
+import { DecisionQueueResponseSchema, SummaryResponseSchema, type Metric } from "@/lib/schemas/types";
 import { useGlobalStore } from "@/lib/store/use-global-store";
 import { formatDateTime } from "@/lib/utils/format";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { deal, period, basis } = useGlobalStore();
   const query = useApiQuery(
     ["summary", deal, period, basis],
     `/api/deal/summary?deal=${encodeURIComponent(deal)}&period=${encodeURIComponent(period)}&basis=${encodeURIComponent(basis)}`,
     SummaryResponseSchema
+  );
+  const decisionQueueQuery = useApiQuery(
+    ["decision-queue", deal, period, basis],
+    `/api/deal/decision-queue?deal=${encodeURIComponent(deal)}&period=${encodeURIComponent(period)}&basis=${encodeURIComponent(basis)}`,
+    DecisionQueueResponseSchema
   );
 
   if (query.isLoading || !query.data) {
@@ -147,6 +155,45 @@ export default function DashboardPage() {
             {changeTrackingMetrics.map((metric) => (
               <KpiCard key={metric.id} metric={metric} />
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Decision Queue</CardTitle>
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+            decisionQueueQuery.data?.readiness === "Ready"
+              ? "bg-emerald-100 text-emerald-700"
+              : decisionQueueQuery.data?.readiness === "Draft"
+                ? "bg-amber-100 text-amber-700"
+                : "bg-rose-100 text-rose-700"
+          }`}>
+            Readiness: {decisionQueueQuery.data?.readiness ?? "Draft"}
+          </span>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(decisionQueueQuery.data?.items ?? []).slice(0, 5).map((item) => (
+            <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-3">
+              <div>
+                <p className="font-medium">{item.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  Impact {item.impactScore.toFixed(1)} • {item.impactArea} • Owner: {item.owner}
+                </p>
+                <p className="text-xs text-muted-foreground">{item.rationale}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {item.blocking ? <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">Blocking</span> : null}
+                <Button size="sm" variant="outline" onClick={() => router.push(item.sourceUrl)}>
+                  Open Source
+                </Button>
+              </div>
+            </div>
+          ))}
+          <div className="pt-1">
+            <Button variant="outline" onClick={() => router.push("/inquiry#decision-queue")}>
+              View Full Decision Queue
+            </Button>
           </div>
         </CardContent>
       </Card>
