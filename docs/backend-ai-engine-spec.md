@@ -39,7 +39,9 @@ Schema contract is in `lib/schemas/types.ts`.
 - `AVG(x_1 ... x_n)` means `(x_1 + x_2 + ... + x_n) / n`.
 - `%` values are decimals multiplied by `100` for display.
   - Example: `0.125` is displayed as `12.5%`.
-- `LTM` means last twelve months.
+- `LTM` means Last Twelve Months — the most recent rolling 12-month window, not a fixed fiscal year.
+  - Example: if today is September 2025, LTM = October 2024 → September 2025.
+  - Always sum the 12 most recent months of available data.
 - Placeholder tag convention used below:
   - `[PLACEHOLDER: see 10.x]` means this displayed value is temporary and must be replaced with the formula in the referenced subsection.
 
@@ -99,6 +101,10 @@ Required columns:
 - `OpexExDA`
 - `DA` (optional)
 - `EBITDA` (optional pre-calculated)
+- `EBIT` (optional pre-calculated; if absent: `EBIT = EBITDA - DA`)
+- `InterestExpense`
+- `EBT` (Earnings Before Tax = Pre-Tax Income; if absent: `EBT = EBIT - InterestExpense`)
+- `TaxExpense`
 
 ## 2.4 Balance Sheet schedule
 Required columns:
@@ -110,6 +116,10 @@ Required columns:
 - `AccountsPayable`
 - `Accruals`
 - `Cash`
+- `ShortTermDebt`
+- `CurrentPortionLTD` (current portion of long-term debt)
+- `LongTermDebt`
+- `TaxesPayable`
 - `TotalAssets`
 - `TotalLiabilities`
 - `Equity`
@@ -120,6 +130,7 @@ Required columns:
 - `Entity`
 - `OperatingCashFlow`
 - `Capex`
+- `CashTaxesPaid` (if separately disclosed; else derived as `TaxExpense + ΔTaxesPayable`)
 - `InvestingCF` (optional)
 - `FinancingCF` (optional)
 
@@ -203,6 +214,12 @@ For every month `m` in last 12 months:
 - `OCF_m`
 - `Capex_m`
 - `CashConversion_m`
+- `EBIT_m`
+- `InterestExpense_m`
+- `EBT_m`
+- `TaxExpense_m`
+- `CashTaxesPaid_m`
+- `TotalDebt_m` (= `ShortTermDebt_m + CurrentPortionLTD_m + LongTermDebt_m`)
 
 All high-level KPIs should be derived from these, not computed ad-hoc in each endpoint.
 
@@ -326,6 +343,78 @@ The sections below use this format:
   - `max(2.1, AdjustmentPct * 0.58)`
 - Production target:
   - `HighRiskAdjImpactPct = SUM(Adjustments.Amount where RiskClass='High') / ReportedEBITDA_LTM`
+
+### 4.1.17 Effective Tax Rate (LTM)
+- Formula:
+  - `TaxExpense_LTM = SUM(TaxExpense_m over 12 months)`
+  - `EBT_LTM = SUM(EBT_m over 12 months)` (EBT = Earnings Before Tax = Pre-Tax Income)
+  - `ETR_LTM = TaxExpense_LTM / EBT_LTM`
+- Output format:
+  - percentage string (example `24.0%`)
+- Edge case — negative EBT:
+  - If `EBT_LTM < 0`, ETR is mathematically meaningless.
+  - Do **not** compute the ratio.
+  - Flag the metric as `N/A` and note earnings instability in the risk model.
+- Source:
+  - IS schedule: `TaxExpense` and `EBT` (or `PreTaxIncome`) columns per month.
+  - or TB mapped tax expense accounts and pre-tax income accounts.
+
+### 4.1.18 Net Debt
+- Formula:
+  - `TotalDebt = ShortTermDebt + CurrentPortionLTD + LongTermDebt`
+  - `NetDebt = TotalDebt - Cash`
+- Note:
+  - Use balance sheet values at the most recent period end.
+  - If `NetDebt < 0`, the company holds more cash than debt — display as net cash position.
+- Output format:
+  - dollar string (example `"$14.2M"`)
+- Source:
+  - BS: `ShortTermDebt`, `CurrentPortionLTD`, `LongTermDebt`, `Cash`
+
+### 4.1.19 Net Debt / EBITDA (LTM)
+- Formula:
+  - `NetLeverage = NetDebt / AdjustedEBITDA_LTM`
+- Note:
+  - Always use **LTM Adjusted EBITDA** as denominator, not reported or quarterly EBITDA.
+  - If `AdjustedEBITDA_LTM <= 0`, flag as `N/A` — ratio is not meaningful.
+- Output format:
+  - ratio string to one decimal (example `"3.2x"`)
+- Risk threshold:
+  - Flag if `NetLeverage > 5.0x`
+- Source:
+  - NetDebt from 4.1.18; AdjustedEBITDA_LTM from 4.1.3
+
+### 4.1.20 Interest Coverage Ratio (LTM)
+- Two versions — return both:
+  - EBITDA-based (primary): `InterestCoverage_EBITDA = AdjustedEBITDA_LTM / InterestExpense_LTM`
+  - EBIT-based (stricter): `InterestCoverage_EBIT = EBIT_LTM / InterestExpense_LTM`
+  - where `InterestExpense_LTM = SUM(InterestExpense_m over 12 months)`
+  - where `EBIT_LTM = SUM(EBIT_m over 12 months)`
+- Note:
+  - If `InterestExpense_LTM = 0`, return `N/A` (no debt / no interest burden).
+- Output format:
+  - ratio string to one decimal (example `"4.8x"`)
+- Risk threshold:
+  - Flag if `InterestCoverage_EBITDA < 2.0x`
+- Source:
+  - IS: `InterestExpense`, `EBIT` per month
+
+### 4.1.21 Cash Tax Rate (LTM)
+- Formula:
+  - `CashTaxesPaid_LTM = SUM(CashTaxesPaid_m over 12 months)`
+  - `CashTaxRate_LTM = CashTaxesPaid_LTM / EBT_LTM`
+- Derivation of `CashTaxesPaid_m` if not directly available:
+  - `CashTaxesPaid_m = TaxExpense_m + ΔTaxesPayable_m`
+  - where `ΔTaxesPayable_m = TaxesPayable_(m-1) - TaxesPayable_m`
+- Why it differs from ETR:
+  - ETR uses accrual-basis tax expense. Cash Tax Rate uses actual cash out the door.
+  - A large gap between ETR and Cash Tax Rate signals deferred tax positions that may reverse.
+- Edge case:
+  - If `EBT_LTM < 0`, flag as `N/A`.
+- Output format:
+  - percentage string (example `"21.4%"`)
+- Source:
+  - CF: `CashTaxesPaid` (or derived from IS `TaxExpense` + BS `TaxesPayable`)
 
 ### 4.1.16 Change Tracking cards [PLACEHOLDER: see 10.3]
 These are currently UI placeholders:
@@ -484,6 +573,75 @@ Balance sheet rows displayed:
 
 Each row currently maps to same trace modal; production should return true line-level lineage.
 
+## 4.2.7 Leverage sub-tab
+
+### Gross Debt
+- Formula:
+  - `GrossDebt = ShortTermDebt + CurrentPortionLTD + LongTermDebt`
+- Source: BS debt columns at latest period
+
+### Net Debt
+- Same as 4.1.18
+
+### Gross Leverage
+- Formula:
+  - `GrossLeverage = GrossDebt / AdjustedEBITDA_LTM`
+- Used for: covenant checks, lender reporting
+- Output format: ratio string (example `"3.8x"`)
+
+### Net Leverage
+- Same as 4.1.19
+
+### Interest Coverage (EBITDA-based)
+- Same as 4.1.20 EBITDA version
+
+### Interest Coverage (EBIT-based)
+- Same as 4.1.20 EBIT version
+- Stricter: excludes D&A cushion, reflects true debt service capacity
+
+### Debt Service Coverage Ratio (DSCR)
+- Formula:
+  - `DSCR = AdjustedEBITDA_LTM / (InterestExpense_LTM + RequiredPrincipalRepayment_LTM)`
+- Where `RequiredPrincipalRepayment_LTM` comes from the debt schedule / amortization table.
+- Why it matters: measures refinancing risk and lender stress exposure.
+- If amortization table unavailable: flag as estimated and use `0` for principal.
+- Output format: ratio string (example `"2.1x"`)
+
+### FCF / Debt (Deleveraging Capacity)
+- Formula:
+  - `FCF_LTM = OCF_LTM - Capex_LTM`
+  - `FCFtoDebt = FCF_LTM / GrossDebt`
+- Why it matters: shows how many years of free cash flow are needed to repay total debt.
+- Output format: percentage string (example `"18.4%"`)
+- Risk threshold:
+  - Flag if `FCFtoDebt < 5%`
+
+## 4.2.8 Tax & Profitability sub-tab
+
+### Effective Tax Rate (LTM)
+- Same as 4.1.17
+
+### Cash Tax Rate (LTM)
+- Same as 4.1.21
+
+### ETR vs Cash Tax Rate Gap
+- Formula:
+  - `TaxRateGap = ETR_LTM - CashTaxRate_LTM`
+- Why it matters:
+  - A large positive gap (ETR > Cash Rate) means deferred tax liabilities are building — they will eventually reverse.
+  - A large negative gap (Cash Rate > ETR) means the company is paying more tax now than it accrues — may indicate tax deferrals unwinding.
+- Output format: percentage string with sign (example `"+4.2%"` or `"-1.8%"`)
+
+### Interest Tax Shield
+- Formula:
+  - `InterestTaxShield = InterestExpense_LTM × StatutoryTaxRate`
+- Where `StatutoryTaxRate` is the applicable jurisdiction rate (input or sourced from company disclosures).
+- Why it matters: quantifies annual tax savings from debt — used in valuation bridge and WACC modeling.
+- Output format: dollar string (example `"$0.9M"`)
+- Source:
+  - IS: `InterestExpense` per month
+  - Policy/assumption: `StatutoryTaxRate`
+
 ---
 
 ## 4.3 Risk Assessment tab
@@ -540,6 +698,23 @@ Each row has:
 - Prior
 - Variance
 - Status (Pass/Warn)
+
+## 4.3.6 Leverage & Tax risk flags
+
+These rules fire automatically and feed into the overall risk score and risk register.
+
+| Rule | Condition | Severity |
+|------|-----------|----------|
+| High leverage | `NetDebt / AdjustedEBITDA_LTM > 5.0x` | Red |
+| Thin interest coverage | `InterestCoverage_EBITDA < 2.0x` | Red |
+| Aggressive tax positioning | `ETR_LTM < 10%` | Amber |
+| Weak deleveraging capacity | `FCFtoDebt < 5%` | Amber |
+| Negative net income (EBT) | `EBT_LTM < 0` | Red |
+| Large ETR vs Cash Tax gap | `abs(TaxRateGap) > 10%` | Amber |
+
+Implementation note:
+- Each triggered rule adds one entry to the risk register with the relevant metric value, threshold, and severity.
+- The overall risk score should incorporate leverage dimension score derived from these rules.
 
 ---
 
