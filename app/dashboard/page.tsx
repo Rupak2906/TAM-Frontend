@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { KpiCard } from "@/components/kpi-card";
 import { ChartCard } from "@/components/charts/chart-card";
@@ -12,8 +13,18 @@ import { DecisionQueueResponseSchema, SummaryResponseSchema, type Metric } from 
 import { useGlobalStore } from "@/lib/store/use-global-store";
 import { formatDateTime } from "@/lib/utils/format";
 
+const kpiTabs = [
+  { key: "overview", label: "Executive Overview" },
+  { key: "performance", label: "Earnings & Performance" },
+  { key: "changes", label: "Change Tracking Metrics" },
+  { key: "taxes", label: "Taxes KPI" },
+] as const;
+
+type KpiTab = (typeof kpiTabs)[number]["key"];
+
 export default function DashboardPage() {
   const router = useRouter();
+  const [kpiTab, setKpiTab] = useState<KpiTab>("overview");
   const { deal, period, basis } = useGlobalStore();
   const query = useApiQuery(
     ["summary", deal, period, basis],
@@ -85,6 +96,22 @@ export default function DashboardPage() {
     createMetric("new-risks", "Newly triggered risks (count)", `${Math.max(1, Math.round(Math.abs(revenueGrowthQoQ) / 2.4))}`, "Count of net-new risks triggered since last refresh", undefined, "Amber"),
     createMetric("risk-split", "% Red / Amber Flags", `${Math.max(18, Math.min(44, 16 + Math.abs(revenueGrowthQoQ))).toFixed(0)}% / ${Math.max(46, 82 - Math.abs(revenueGrowthQoQ)).toFixed(0)}%`, "Flag ratio = category count / total flags", undefined, "Amber"),
   ];
+  const taxesKpiMetrics: Metric[] = [
+    createMetric("tax-deferred", "Deferred tax assets/liabilities", "$1.1M / $0.8M", "Net deferred taxes = Deferred tax assets - Deferred tax liabilities", "+$0.1M", "Amber"),
+    createMetric("tax-nol", "NOL", "$2.6M", "NOL carryforward = cumulative tax losses available to offset taxable income", undefined, "Amber"),
+    createMetric("tax-vat", "Sales tax/VAT exposure", "$0.4M", "Exposure = estimated historical indirect tax under-accrual + penalties/interest", undefined, "Red"),
+    createMetric("tax-payroll", "Payroll tax risks", "$0.2M", "Payroll tax risk = unresolved withholding and remittance variances", undefined, "Amber"),
+    createMetric("tax-jurisdiction", "Jurisdictional exposure", "5 jurisdictions", "Jurisdictional exposure = count of material entities with elevated local tax risk", "+1", "Amber"),
+  ];
+  const activeKpis =
+    kpiTab === "overview"
+      ? data.metrics
+      : kpiTab === "performance"
+        ? additionalExecutiveMetrics
+        : kpiTab === "changes"
+          ? changeTrackingMetrics
+          : taxesKpiMetrics;
+  const activeKpiCols = kpiTab === "taxes" ? "md:grid-cols-2 xl:grid-cols-5" : "md:grid-cols-2 xl:grid-cols-4";
 
   return (
     <div className="space-y-6">
@@ -104,16 +131,25 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {data.metrics.map((metric) => (
-          <KpiCard key={metric.id} metric={metric} />
-        ))}
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {additionalExecutiveMetrics.map((metric) => (
-          <KpiCard key={metric.id} metric={metric} />
-        ))}
-      </div>
+      <Card>
+        <CardHeader className="space-y-4">
+          <CardTitle>KPI Groups</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            {kpiTabs.map((tab) => (
+              <Button key={tab.key} variant={tab.key === kpiTab ? "default" : "outline"} size="sm" onClick={() => setKpiTab(tab.key)}>
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className={`grid gap-3 ${activeKpiCols}`}>
+            {activeKpis.map((metric) => (
+              <KpiCard key={metric.id} metric={metric} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Revenue & Adjusted EBITDA trend" steps={buildSteps} renderChart={(expanded) => <TrendLineChart data={data.trend} expanded={expanded} />} />
@@ -147,17 +183,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader><CardTitle>Change Tracking Metrics</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {changeTrackingMetrics.map((metric) => (
-              <KpiCard key={metric.id} metric={metric} />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
