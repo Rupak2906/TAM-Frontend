@@ -25,6 +25,7 @@ type KpiTab = (typeof kpiTabs)[number]["key"];
 export default function DashboardPage() {
   const router = useRouter();
   const [kpiTab, setKpiTab] = useState<KpiTab>("overview");
+  const [benchmarkMode, setBenchmarkMode] = useState(false);
   const { deal, period, basis } = useGlobalStore();
   const query = useApiQuery(
     ["summary", deal, period, basis],
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   }
 
   const data = query.data;
+  const benchmarkById = new Map(data.benchmarkCatalog?.map((row) => [row.metricId, row.benchmark]) ?? []);
   const buildSteps = data.metrics[0]?.lineage ?? [];
   const baseMetric = data.metrics[0];
   const createMetric = (
@@ -63,6 +65,7 @@ export default function DashboardPage() {
     value,
     delta,
     severity,
+    benchmark: benchmarkById.get(id),
     lineage: baseMetric.lineage.map((s, idx) => (idx === 2 ? { ...s, description: formula } : s)),
     cellTrace: baseMetric.cellTrace.map((s, idx) => (idx === 1 ? { ...s, logic: formula, value } : { ...s, value })),
   });
@@ -133,7 +136,27 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader className="space-y-4">
-          <CardTitle>KPI Groups</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>KPI Groups</CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Benchmark View</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={benchmarkMode}
+                onClick={() => setBenchmarkMode((prev) => !prev)}
+                className={`relative h-6 w-11 rounded-full transition ${
+                  benchmarkMode ? "bg-cyan-600" : "bg-muted"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition ${
+                    benchmarkMode ? "left-[22px]" : "left-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {kpiTabs.map((tab) => (
               <Button key={tab.key} variant={tab.key === kpiTab ? "default" : "outline"} size="sm" onClick={() => setKpiTab(tab.key)}>
@@ -145,7 +168,7 @@ export default function DashboardPage() {
         <CardContent>
           <div className={`grid gap-3 ${activeKpiCols}`}>
             {activeKpis.map((metric) => (
-              <KpiCard key={metric.id} metric={metric} />
+              <KpiCard key={metric.id} metric={metric} benchmarkMode={benchmarkMode} />
             ))}
           </div>
         </CardContent>

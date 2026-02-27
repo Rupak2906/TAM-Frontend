@@ -19,12 +19,30 @@ export const LineageStepSchema = z.object({
   references: z.array(z.string()),
 });
 
+export const BenchmarkSchema = z.object({
+  sector: z.string(),
+  subSector: z.string(),
+  lowerQuartile: z.number(),
+  upperQuartile: z.number(),
+  sectorMedian: z.number(),
+  subSectorMedian: z.number(),
+  companyValue: z.number(),
+  unit: z.enum(["currency_m", "percent", "ratio", "count"]),
+  direction: z.enum(["higher_better", "lower_better", "target_band"]),
+});
+
+export const BenchmarkCatalogItemSchema = z.object({
+  metricId: z.string(),
+  benchmark: BenchmarkSchema,
+});
+
 export const MetricSchema = z.object({
   id: z.string(),
   label: z.string(),
   value: z.string(),
   delta: z.string().optional(),
   severity: SeveritySchema.optional(),
+  benchmark: BenchmarkSchema.optional(),
   lineage: z.array(LineageStepSchema),
   cellTrace: z.array(CellTraceSchema),
 });
@@ -146,6 +164,7 @@ export const DecisionQueueResponseSchema = z.object({
 export const SummaryResponseSchema = z.object({
   lastUpdated: z.string(),
   metrics: z.array(MetricSchema),
+  benchmarkCatalog: z.array(BenchmarkCatalogItemSchema).optional(),
   trend: z.array(TimePointSchema),
   insights: z.array(InsightSchema),
   deltaFeed: z.array(DeltaFeedItemSchema),

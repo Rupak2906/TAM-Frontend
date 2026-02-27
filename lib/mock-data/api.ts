@@ -1,5 +1,5 @@
 import { analysisData, customerData, documentsData, inquiryData, riskData, summaryData } from "@/lib/mock-data/data";
-import type { DecisionQueueResponse } from "@/lib/schemas/types";
+import type { DecisionQueueResponse, Metric } from "@/lib/schemas/types";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -10,6 +10,8 @@ type FetchOptions = {
 type CompanyProfile = {
   key: string;
   displayName: string;
+  sector: string;
+  subSector: string;
   baseRevenueLtm: number;
   monthlyGrowth: number;
   seasonalityAmp: number;
@@ -55,6 +57,8 @@ function profileFromSeed(deal: string | null): CompanyProfile {
   return {
     key: "seeded",
     displayName: name,
+    sector: "Technology",
+    subSector: "Vertical SaaS",
     baseRevenueLtm: 38 + r1 * 62,
     monthlyGrowth: -0.003 + r2 * 0.013,
     seasonalityAmp: 0.02 + r3 * 0.05,
@@ -80,6 +84,8 @@ function getCompanyProfile(deal: string | null): CompanyProfile {
     return {
       key: "apple",
       displayName: normalizeDealName(deal),
+      sector: "Technology",
+      subSector: "Consumer Electronics",
       baseRevenueLtm: 91.4,
       monthlyGrowth: 0.0055,
       seasonalityAmp: 0.024,
@@ -102,6 +108,8 @@ function getCompanyProfile(deal: string | null): CompanyProfile {
     return {
       key: "tesla",
       displayName: normalizeDealName(deal),
+      sector: "Automotive",
+      subSector: "Electric Vehicles",
       baseRevenueLtm: 58.6,
       monthlyGrowth: 0.0038,
       seasonalityAmp: 0.043,
@@ -124,6 +132,8 @@ function getCompanyProfile(deal: string | null): CompanyProfile {
     return {
       key: "microsoft",
       displayName: normalizeDealName(deal),
+      sector: "Technology",
+      subSector: "Enterprise Software",
       baseRevenueLtm: 76.8,
       monthlyGrowth: 0.0048,
       seasonalityAmp: 0.021,
@@ -146,6 +156,8 @@ function getCompanyProfile(deal: string | null): CompanyProfile {
     return {
       key: "meridian",
       displayName: normalizeDealName(deal),
+      sector: "Healthcare",
+      subSector: "Provider Services",
       baseRevenueLtm: 47.2,
       monthlyGrowth: 0.0023,
       seasonalityAmp: 0.034,
@@ -168,6 +180,8 @@ function getCompanyProfile(deal: string | null): CompanyProfile {
     return {
       key: "zenith",
       displayName: normalizeDealName(deal),
+      sector: "Industrial",
+      subSector: "Specialty Manufacturing",
       baseRevenueLtm: 69.1,
       monthlyGrowth: 0.0042,
       seasonalityAmp: 0.029,
@@ -190,6 +204,8 @@ function getCompanyProfile(deal: string | null): CompanyProfile {
     return {
       key: "atlas",
       displayName: normalizeDealName(deal),
+      sector: "Technology",
+      subSector: "Vertical SaaS",
       baseRevenueLtm: 63.7,
       monthlyGrowth: 0.0031,
       seasonalityAmp: 0.03,
@@ -292,6 +308,86 @@ function summarizeNumbers(trend: ReturnType<typeof rollupTrend>) {
   };
 }
 
+type Benchmark = NonNullable<Metric["benchmark"]>;
+
+function benchmarkForMetric(
+  profile: CompanyProfile,
+  metricId: string,
+  companyValue: number,
+  unit: Benchmark["unit"],
+  direction: Benchmark["direction"],
+  volatility: number
+): Benchmark {
+  const spread = Math.max(companyValue * volatility, unit === "count" ? 1 : 0.8);
+  const sectorMedian = clamp(companyValue * (1 + (profile.riskTilt - 0.4) * 0.12), companyValue - spread * 0.9, companyValue + spread * 0.9);
+  const subSectorMedian = clamp(sectorMedian * (1 + (profile.discountRisk - 0.45) * 0.08), sectorMedian - spread * 0.7, sectorMedian + spread * 0.7);
+  const lowerQuartile = Math.max(0, Math.min(sectorMedian, subSectorMedian) - spread);
+  const upperQuartile = Math.max(lowerQuartile + 0.01, Math.max(sectorMedian, subSectorMedian) + spread);
+
+  return {
+    sector: profile.sector,
+    subSector: profile.subSector,
+    lowerQuartile: Number(lowerQuartile.toFixed(metricId === "overall-risk" ? 1 : 2)),
+    upperQuartile: Number(upperQuartile.toFixed(metricId === "overall-risk" ? 1 : 2)),
+    sectorMedian: Number(sectorMedian.toFixed(metricId === "overall-risk" ? 1 : 2)),
+    subSectorMedian: Number(subSectorMedian.toFixed(metricId === "overall-risk" ? 1 : 2)),
+    companyValue: Number(companyValue.toFixed(metricId === "overall-risk" ? 1 : 2)),
+    unit,
+    direction,
+  };
+}
+
+function summaryBenchmarks(
+  profile: CompanyProfile,
+  numbers: ReturnType<typeof summarizeNumbers>,
+  riskScore: number
+): Partial<Record<string, Benchmark>> {
+  return {
+    "revenue-ltm": benchmarkForMetric(profile, "revenue-ltm", numbers.revenueLtm, "currency_m", "higher_better", 0.14),
+    "reported-ebitda": benchmarkForMetric(profile, "reported-ebitda", numbers.reportedEbitdaLtm, "currency_m", "higher_better", 0.18),
+    "adjusted-ebitda": benchmarkForMetric(profile, "adjusted-ebitda", numbers.adjustedEbitdaLtm, "currency_m", "higher_better", 0.18),
+    "adj-pct": benchmarkForMetric(profile, "adj-pct", numbers.adjustmentPct, "percent", "lower_better", 0.2),
+    "avg-nwc": benchmarkForMetric(profile, "avg-nwc", numbers.avgNwc, "currency_m", "target_band", 0.16),
+    "nwc-peg": benchmarkForMetric(profile, "nwc-peg", numbers.avgNwc * 1.03, "currency_m", "target_band", 0.15),
+    "cash-conv": benchmarkForMetric(profile, "cash-conv", numbers.avgCashConversion, "percent", "higher_better", 0.2),
+    "overall-risk": benchmarkForMetric(profile, "overall-risk", riskScore, "ratio", "lower_better", 0.22),
+  };
+}
+
+function dashboardBenchmarkCatalog(
+  profile: CompanyProfile,
+  trend: ReturnType<typeof rollupTrend>,
+  numbers: ReturnType<typeof summarizeNumbers>,
+  riskScore: number
+): Partial<Record<string, Benchmark>> {
+  const revenueAvg = numbers.revenueLtm / Math.max(trend.length, 1);
+  const revenueGrowthYoY = ((trend[trend.length - 1]?.revenue ?? 0) / Math.max(trend[0]?.revenue ?? 1, 0.1) - 1) * 100;
+  const revenueGrowthQoQ = ((trend[trend.length - 1]?.revenue ?? 0) / Math.max(trend[trend.length - 4]?.revenue ?? 1, 0.1) - 1) * 100;
+  const adjustedLtm = numbers.adjustedEbitdaLtm;
+  const adjPct = numbers.adjustmentPct;
+
+  const base = summaryBenchmarks(profile, numbers, riskScore);
+
+  return {
+    ...base,
+    "rev-growth": benchmarkForMetric(profile, "rev-growth", revenueGrowthYoY, "percent", "higher_better", 0.28),
+    "ebitda-margin-vs": benchmarkForMetric(profile, "ebitda-margin-vs", ((adjustedLtm / Math.max(revenueAvg * 12, 0.1)) * 100), "percent", "higher_better", 0.2),
+    "normalized-earnings": benchmarkForMetric(profile, "normalized-earnings", adjustedLtm * 0.98, "currency_m", "higher_better", 0.2),
+    "run-rate-earnings": benchmarkForMetric(profile, "run-rate-earnings", adjustedLtm * 1.01, "currency_m", "higher_better", 0.2),
+    "nwc-rev-pct": benchmarkForMetric(profile, "nwc-rev-pct", ((numbers.avgNwc / Math.max(revenueAvg, 0.1)) * 100), "percent", "target_band", 0.14),
+    "highrisk-ebitda-impact": benchmarkForMetric(profile, "highrisk-ebitda-impact", Math.max(2.1, adjPct * 0.58), "percent", "lower_better", 0.24),
+    "delta-adj-ebitda": benchmarkForMetric(profile, "delta-adj-ebitda", Math.max(0.12, adjustedLtm * 0.018), "currency_m", "higher_better", 0.35),
+    "new-adjustments": benchmarkForMetric(profile, "new-adjustments", Math.max(0.2, adjustedLtm * 0.034), "currency_m", "lower_better", 0.26),
+    "new-risks": benchmarkForMetric(profile, "new-risks", Math.max(1, Math.round(Math.abs(revenueGrowthQoQ) / 2.4)), "count", "lower_better", 0.42),
+    "risk-split": benchmarkForMetric(profile, "risk-split", Math.max(18, Math.min(44, 16 + Math.abs(revenueGrowthQoQ))), "percent", "lower_better", 0.24),
+    "tax-deferred": benchmarkForMetric(profile, "tax-deferred", 1.1, "currency_m", "target_band", 0.18),
+    "tax-nol": benchmarkForMetric(profile, "tax-nol", 2.6, "currency_m", "target_band", 0.22),
+    "tax-vat": benchmarkForMetric(profile, "tax-vat", 0.4, "currency_m", "lower_better", 0.25),
+    "tax-payroll": benchmarkForMetric(profile, "tax-payroll", 0.2, "currency_m", "lower_better", 0.28),
+    "tax-jurisdiction": benchmarkForMetric(profile, "tax-jurisdiction", 5, "count", "lower_better", 0.2),
+  };
+}
+
 function calculateRiskScore(
   profile: CompanyProfile,
   numbers: ReturnType<typeof summarizeNumbers>,
@@ -331,11 +427,13 @@ export async function getSummary(
   const trend = rollupTrend(deal, period, basis);
   const numbers = summarizeNumbers(trend);
   const riskScore = calculateRiskScore(profile, numbers, period, basis);
+  const benchmarkCatalog = dashboardBenchmarkCatalog(profile, trend, numbers, riskScore);
   const data = clone(summaryData);
 
   data.lastUpdated = new Date().toISOString();
   data.trend = trend;
-  data.metrics = data.metrics.map((metric) => {
+  data.metrics = data.metrics
+    .map((metric) => {
     if (metric.id === "revenue-ltm") {
       return { ...metric, value: moneyM(numbers.revenueLtm), delta: pct((trend[11].revenue / Math.max(trend[8].revenue, 0.1) - 1) * 100) };
     }
@@ -373,7 +471,12 @@ export async function getSummary(
       };
     }
     return metric;
-  });
+  })
+    .map((metric) => ({ ...metric, benchmark: benchmarkCatalog[metric.id] }));
+  data.benchmarkCatalog = Object.entries(benchmarkCatalog).reduce<Array<{ metricId: string; benchmark: Benchmark }>>((acc, [metricId, benchmark]) => {
+    if (benchmark) acc.push({ metricId, benchmark });
+    return acc;
+  }, []);
 
   const failCount = riskScore >= 7 ? 3 : riskScore >= 5 ? 2 : 1;
   data.riskBreakdown = { red: failCount, amber: Math.max(2, 7 - failCount) };
