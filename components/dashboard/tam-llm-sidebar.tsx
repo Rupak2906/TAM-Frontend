@@ -104,8 +104,8 @@ export function TamLlmSidebar() {
   }
 
   return (
-    <div className="tam-ai-slide fixed bottom-4 right-4 top-24 z-50 w-[380px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-300 bg-white/95 text-slate-900 shadow-[0_16px_50px_rgba(2,132,199,0.25)] backdrop-blur-xl">
-      <div className="relative border-b border-slate-200 p-4">
+    <div className="tam-ai-slide fixed bottom-4 right-4 top-24 z-50 flex w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white/95 text-slate-900 shadow-[0_16px_50px_rgba(2,132,199,0.25)] backdrop-blur-xl">
+      <div className="relative shrink-0 border-b border-slate-200 p-4">
         <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full border border-cyan-300/35 tam-ai-orbit" />
         <div className="pointer-events-none absolute right-8 top-5 h-10 w-10 rounded-full border border-emerald-300/40 tam-ai-orbit-rev" />
 
@@ -123,7 +123,7 @@ export function TamLlmSidebar() {
         </div>
       </div>
 
-      <div className="max-h-[30%] space-y-2 overflow-y-auto border-b border-slate-200 p-3">
+      <div className="max-h-44 shrink-0 space-y-2 overflow-y-auto border-b border-slate-200 p-3">
         {prompts.map((prompt) => (
           <button
             key={prompt}
@@ -137,7 +137,7 @@ export function TamLlmSidebar() {
         ))}
       </div>
 
-      <div className="h-[42%] space-y-2 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {messages.map((message, idx) => (
           <div
             key={idx}
@@ -157,12 +157,12 @@ export function TamLlmSidebar() {
         {loading ? <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-2 text-xs text-cyan-900">TAM LLM is reasoning...</div> : null}
       </div>
 
-      <div className="space-y-2 border-t border-slate-200 p-3">
+      <div className="shrink-0 space-y-2 border-t border-slate-200 p-3">
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask TAM LLM about trends, risk, tie-outs, or storyline..."
-          className="min-h-20 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-cyan-500"
+          className="min-h-16 max-h-28 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-cyan-500"
         />
         <Button className="w-full" onClick={() => ask()} disabled={loading || question.trim().length < 2}>
           Ask TAM LLM
